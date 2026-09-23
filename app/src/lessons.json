@@ -1,0 +1,74 @@
+{
+  "schema": "rapp-model-hive-lessons/1",
+  "title": "Come inside a model Hive",
+  "subtitle": "A furnished example of people working together, without one master copy.",
+  "synthetic": "SYNTHETIC: fictional people and devices. These are public test keys that anyone can re-derive. Never use them for real data.",
+  "rooms": [
+    {
+      "id": "front-door",
+      "title": "Front door",
+      "intro": [
+        "Think of a model home. Everything is furnished so you can walk through it, but nobody real lives here. This is the same idea for a Hive.",
+        "A stream is a journal; a frame is one signed step. New Hive decisions go on each signer's own memory stream. The older Mother Hive body stream is a shared journal, not another person. The Hive works out who belongs and which rules apply from the signed steps, not the tour guide's word."
+      ]
+    },
+    {
+      "id": "residents",
+      "title": "Residents",
+      "intro": [
+        "A signature shows which key wrote a step. Joining is a separate decision. A grant is a member saying yes to a request. It counts only if the request's rules let that member decide.",
+        "Deciders simply means who decides. Policy v1 names only Avery, the steward. Policy v2 lets every member decide. A key confirmation separately records that someone checked the person's key with them."
+      ]
+    },
+    {
+      "id": "renovation",
+      "title": "Renovation",
+      "intro": [
+        "The starting copy uses the current version, rapp-hive/1. The furnished copy explores the draft rapp-hive/2. Both copies are packed into this page.",
+        "Avery signed the old declaration as the first frame of the rapp-hive/1 Mother Hive stream. That stream has no separate signing identity. The declared owner, Avery, starts as the steward founder.",
+        "Policy v1 names Avery as its only decider, so it mirrors the old one-owner decision. Each returning member signs their own request; the steward signs the grants. In the furnished model, policy v2 later lets every member decide, while pending requests keep their earlier rules."
+      ]
+    },
+    {
+      "id": "schemas-and-lenses",
+      "title": "Schemas and lenses",
+      "intro": [
+        "A schema is a message's shape: its field names and types, not its contents. One app says title; another says text. A lens is a set of translation rules that brings those shapes into a shared view.",
+        "A new lens version must keep the same shared view, accept the old shapes, and preserve the meaning of every old message. These are the lens laws. Even enough signatures cannot overrule them.",
+        "Membership is decided first. Messages from people still outside the Hive stay in quarantine. They never teach new shapes or change a lens."
+      ]
+    },
+    {
+      "id": "crossings",
+      "title": "Crossings",
+      "intro": [
+        "Choose a message and a receiving resident. The Hive reads it into the shared view, then tries to rebuild it in a shape the receiving app uses.",
+        "The result is only an unsigned proposal. The original stays put. Only the receiving owner can sign it into their own stream, and this tour never signs anything."
+      ]
+    },
+    {
+      "id": "agreement",
+      "title": "Agreement",
+      "intro": [
+        "There is no master copy. Each device can sign a manifest: a list of the newest steps it has seen, plus the state it worked out from them.",
+        "This page uses each member's last manifest in the timeline and repeats its calculation. Consistent means the claim follows from those steps. Behind means some steps had not arrived yet. Divergent means the claimed state does not follow from its own list."
+      ]
+    },
+    {
+      "id": "timeline",
+      "title": "Timeline",
+      "intro": [
+        "Every frame is below, in the same order the engine uses: declared time first, then the frame's fingerprint to break a tie. Times are what the signers wrote, not proof of a wall clock.",
+        "The friendly notes come from the tour story. Who signed, when, and whether a request took effect come from the verified carrier."
+      ]
+    },
+    {
+      "id": "try-it",
+      "title": "Try it",
+      "intro": [
+        "This is a safe place to change a word and see what happens. The tamper test uses a separate copy. Your last checked Hive stays intact.",
+        "You can also take the carrier with you as a JSON bundle, or open another copy of this same model. Nothing is uploaded. Keep real information out of this public demo."
+      ]
+    }
+  ]
+}

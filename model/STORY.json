@@ -1,0 +1,312 @@
+{
+ "schema": "rapp-model-hive-story/1",
+ "note": "DERIVED for the tour and the page; never authority. Regenerate with tools/build.py. Synthetic model: fictional people and devices, signed with public test keys that anyone can re-derive. Never use them for real data.",
+ "anchor": "03972c7e8049b59134681ef9b1d7af369e4b06273d262691c5b28d6c48dcdce8",
+ "state_particle": "54fd0f9b7b081be8a49704c45b37fc741813f0e8c11838c5796a3850edf3d8c2",
+ "people": {
+  "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b": {
+   "slug": "avery-laptop",
+   "label": "Avery (team lead, laptop)"
+  },
+  "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0": {
+   "slug": "blake-phone",
+   "label": "Blake (field engineer, phone)"
+  },
+  "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a": {
+   "slug": "casey-tablet",
+   "label": "Casey (designer, tablet)"
+  },
+  "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8": {
+   "slug": "drew-desktop",
+   "label": "Drew (new analyst, desktop)"
+  },
+  "rappid:@contoso/emery-kiosk:e3cb6fe1c6629325b3e61a1ae81736198dcb492d4fb6c6f0e1d424fc9e9a64ed": {
+   "slug": "emery-kiosk",
+   "label": "Emery (front-desk kiosk, joined on the old system)"
+  },
+  "rappid:@contoso/frankie-laptop:2a7d96c275540100a5312fa8f10490a5ad2b8cdaafe372704d87ced7d2c322bd": {
+   "slug": "frankie-laptop",
+   "label": "Frankie (contractor, still waiting)"
+  },
+  "rappid:@contoso/contoso-hive:f2a17f3ba58030f62f46d5af946feed5893a6608b0a80245782c436c77e1e5bc": {
+   "slug": "contoso-hive",
+   "label": "The rapp-hive/1 Mother Hive stream (its owner, Avery, signs it)"
+  }
+ },
+ "story": [
+  {
+   "utc": "2026-09-20T09:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "8e864ead138f8e6d31166304c04b1adf698716ae4805b6b05749ca4a32a51380",
+   "note": "rapp-hive/1 era: Avery, the one owner, declares the Hive as the first frame of its Mother Hive stream (Blake and Casey are members)."
+  },
+  {
+   "utc": "2026-09-20T10:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "74b2777228ea3c814d5ac04c378dd5113f0322a94708adcf283d73bb015866f5",
+   "note": "Avery's laptop app writes a task."
+  },
+  {
+   "utc": "2026-09-20T10:30:00.000Z",
+   "who": "blake-phone",
+   "wave": "29a20deff3bb2c062b474fbea855179b48fe911c0926497abf740d7cd05c585f",
+   "note": "Blake's phone app writes a task in its own shape."
+  },
+  {
+   "utc": "2026-09-20T11:00:00.000Z",
+   "who": "emery-kiosk",
+   "wave": "3d909236cef8d7636b570a6f681a0a2670ef42ce322e88a31755abdb92dabe0c",
+   "note": "The old onboarding script records Emery's signed request to join. Nobody has approved it yet."
+  },
+  {
+   "utc": "2026-09-21T09:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "9527dc8cd729770c2b9436d0f08f0a297e7714890f199d12fc14b8b0bdf82292",
+   "note": "Migration: the rapp-hive/1 owner accepts the rapp-hive/2 anchor as its steward founder."
+  },
+  {
+   "utc": "2026-09-21T09:05:00.000Z",
+   "who": "blake-phone",
+   "wave": "a44946b8a1162d5918d7cfc4f63a9ee10c42d08d0ffb603a4b4a54bc37fe69fd",
+   "note": "Migration: a rapp-hive/1 member joins under the steward policy (it mirrors rapp-hive/1)."
+  },
+  {
+   "utc": "2026-09-21T09:10:00.000Z",
+   "who": "casey-tablet",
+   "wave": "0f4a48d46dd0823537494446ff81a94b8fd36ef6c67b4dce62ff4204c185e231",
+   "note": "Migration: a rapp-hive/1 member joins under the steward policy (it mirrors rapp-hive/1)."
+  },
+  {
+   "utc": "2026-09-21T09:20:00.000Z",
+   "who": "avery-laptop",
+   "wave": "62116bccf5cef5d29ac3bdea7c1e332af5c223e0bb9771643f4d5069834d334c",
+   "note": "Migration: the steward grants a rapp-hive/1 member, exactly as before."
+  },
+  {
+   "utc": "2026-09-21T09:20:00.001Z",
+   "who": "avery-laptop",
+   "wave": "f7f5d1ca4745a9f2a697331faf32592e419b950f5ac638527486858883d838fd",
+   "note": "Migration: the steward grants a rapp-hive/1 member, exactly as before."
+  },
+  {
+   "utc": "2026-09-21T09:30:00.000Z",
+   "who": "avery-laptop",
+   "wave": "362af750d77c2fe738ff370cdc93857d19da938334e21e528d0712a8fbc7fe6f",
+   "note": "Avery adopts lens contoso-tasks v1 for the laptop app's schema."
+  },
+  {
+   "utc": "2026-09-21T09:31:00.000Z",
+   "who": "avery-laptop",
+   "wave": "e400e5b789af14898824dcc1a6555bce4615dcce10f14a14f22d36fd585155a8",
+   "note": "Avery adopts lens phone-tasks v1 for the phone app's schema."
+  },
+  {
+   "utc": "2026-09-22T09:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "d57a482ff8a2458ec97efd39e9cc566908049ab5a24017391e95548bd224859c",
+   "note": "The steward hands decisions to the peers: under policy v2 every member decides, and joining needs 2 grants and a confirmed key."
+  },
+  {
+   "utc": "2026-09-22T09:10:00.000Z",
+   "who": "blake-phone",
+   "wave": "ec3df3170dff752b2a9a26777e8805ed887af4056b71e4d63454dbc81aa8595f",
+   "note": "Blake approves Emery's old request, but it was made under policy v1, where only Avery decides: Blake's approval does not count."
+  },
+  {
+   "utc": "2026-09-22T09:12:00.000Z",
+   "who": "avery-laptop",
+   "wave": "b990d56504499f72ff3a3fc8fc7f89b3740cc1e99aa873e03cdc99027c84de73",
+   "note": "Avery approves it: under the rules it was made under, the steward's one approval is enough, so Emery is in."
+  },
+  {
+   "utc": "2026-09-22T09:20:00.000Z",
+   "who": "drew-desktop",
+   "wave": "5db03a61cd14c7b2287814f7b4322d6f72bb4219a45b1d04e234c0d5408c131e",
+   "note": "Drew's desktop asks to join under policy v2."
+  },
+  {
+   "utc": "2026-09-22T09:25:00.000Z",
+   "who": "casey-tablet",
+   "wave": "5152e12ba502f39d9d922b818ceee76411d175d54e695fe0a7d400345c1a3103",
+   "note": "Casey confirms Drew's key fingerprint on a video call."
+  },
+  {
+   "utc": "2026-09-22T09:30:00.000Z",
+   "who": "avery-laptop",
+   "wave": "a86ef109340122f3f64d55b33b0b7164587c98e3837707f2d23fec9a4008fbdc",
+   "note": "Avery grants Drew."
+  },
+  {
+   "utc": "2026-09-22T09:35:00.000Z",
+   "who": "casey-tablet",
+   "wave": "2d0d9d8984c29ac81e34d5fb70dab51f830be5c9f930a479ade899bb47b12be6",
+   "note": "Casey grants Drew: two grants and a confirmed key, so Drew is in."
+  },
+  {
+   "utc": "2026-09-22T09:40:00.000Z",
+   "who": "frankie-laptop",
+   "wave": "e35a51e9b4e124a5138ad98c0fcfc49077c597f9e73d2098c6e839caf5222a73",
+   "note": "Frankie asks to join under policy v2."
+  },
+  {
+   "utc": "2026-09-22T09:45:00.000Z",
+   "who": "blake-phone",
+   "wave": "c67c30519e7215f84b41748022967987d74e340710e466d2135eb7b011616ebf",
+   "note": "Blake confirms Frankie's key in person."
+  },
+  {
+   "utc": "2026-09-22T09:50:00.000Z",
+   "who": "blake-phone",
+   "wave": "f3b4ab6151f6ced60f9b78c01932793767627537623d0792f4e6674cc1774605",
+   "note": "Blake grants Frankie. One more grant is needed."
+  },
+  {
+   "utc": "2026-09-22T09:55:00.000Z",
+   "who": "frankie-laptop",
+   "wave": "63619f89e52fda4a366e6f011497d6f48882bbbe2e19722b97474caaac16456b",
+   "note": "Frankie writes a task with an extra 'invoice' field. It waits in quarantine until Frankie is admitted, and a quarantined message never teaches the Hive a new shape."
+  },
+  {
+   "utc": "2026-09-22T13:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "b95d137dd89584c0807638984699972f6e96e2377dabe34846a38fca8cffb10a",
+   "note": "Same schema as before: it maps instantly."
+  },
+  {
+   "utc": "2026-09-22T13:10:00.000Z",
+   "who": "avery-laptop",
+   "wave": "98b8731fd058cebb3b1f873f825cb863e4f90465e526871f50cf2cefe64857de",
+   "note": "The laptop app adds a 'priority' field: a new schema that only adds fields, so lens v2 is learned automatically."
+  },
+  {
+   "utc": "2026-09-22T13:20:00.000Z",
+   "who": "drew-desktop",
+   "wave": "af35abe2bda6d9d732ef2066aef914ab1d7dcbab976fe2e079244324deea5314",
+   "note": "Drew's desktop uses the updated app; lens v2 maps it."
+  },
+  {
+   "utc": "2026-09-22T13:30:00.000Z",
+   "who": "casey-tablet",
+   "wave": "45ef3d674de8fd20a30c5de1fb9fd09a848fd0dadf1e7f4fc16d70164d62f068",
+   "note": "Casey's tablet app renamed 'title' to 'summary': a new schema no lens maps yet. It waits."
+  },
+  {
+   "utc": "2026-09-22T14:00:00.000Z",
+   "who": "casey-tablet",
+   "wave": "a3b07947c66612ab990788270202fd0b90e67f8591d6287220900ee7faea15ff",
+   "note": "Casey proposes lens v3: it keeps v2's mapping and adds one for the tablet's schema."
+  },
+  {
+   "utc": "2026-09-22T14:10:00.000Z",
+   "who": "avery-laptop",
+   "wave": "9f3fa3e1d4659bdc7a1823d7e318c1a67e59f2242a47d010430c7c219d84a027",
+   "note": "Avery agrees: two peers, the laws hold, lens v3 is active and Casey's task maps."
+  },
+  {
+   "utc": "2026-09-22T14:20:00.000Z",
+   "who": "casey-tablet",
+   "wave": "46b1fbda2050e4759b05a7e69808ec95233b1a4473cc7a231895cb37607e0559",
+   "note": "Casey's tablet re-sends its proposal after reconnecting. It is stale (v3 is already active), so nothing changes."
+  },
+  {
+   "utc": "2026-09-22T14:30:00.000Z",
+   "who": "blake-phone",
+   "wave": "e04cb4ff1723535549c43248118fbf8cb0feb97e14c14393631ea6869fe84582",
+   "note": "Blake proposes a careless v4 that rewrites every task's owner as 'team'."
+  },
+  {
+   "utc": "2026-09-22T14:40:00.000Z",
+   "who": "drew-desktop",
+   "wave": "d07a37a5ef483d17f09ea6123bbaf8fe18abcbb4dd93f235431ec05bd3468b20",
+   "note": "Drew signs it too. Two signatures, but it changes what old tasks mean, so the laws refuse it."
+  },
+  {
+   "utc": "2026-09-22T14:45:00.000Z",
+   "who": "blake-phone",
+   "wave": "5dc288f28b17937a0de22dad82c3667243746253e3e79d237d05186c0ce94a7c",
+   "note": "Blake's phone signed its manifest before going offline: consistent, just behind."
+  },
+  {
+   "utc": "2026-09-22T15:00:00.000Z",
+   "who": "blake-phone",
+   "wave": "e5e2cbbdc4714c65268e7304c26394402db9bfa8f22527c4891c5b4904d8681c",
+   "note": "Blake's phone starts sending 'reactions': a schema no lens understands yet. Only it waits."
+  },
+  {
+   "utc": "2026-09-22T15:10:00.000Z",
+   "who": "emery-kiosk",
+   "wave": "c22cfe76d2ec0ecd06c15821666858ee92cc183e6bc5b10a1f3035594c3d5520",
+   "note": "Emery's kiosk uses the phone app's schema; lens phone-tasks maps it."
+  },
+  {
+   "utc": "2026-09-22T15:20:00.000Z",
+   "who": "avery-laptop",
+   "wave": "cedcded95b0ecf520470562eeb7ca570da3469226c74d533f66fbdfa5fd482c6",
+   "note": "Avery vouches for Blake's key too. Vouching is recorded even after admission."
+  },
+  {
+   "utc": "2026-09-23T09:00:00.000Z",
+   "who": "avery-laptop",
+   "wave": "768c06d2d77616c4bf1e2bd171ecce4ea9368b1afed8195de60fc9a310ea1871",
+   "note": "avery-laptop signs its manifest: same heads, same state."
+  },
+  {
+   "utc": "2026-09-23T09:05:00.000Z",
+   "who": "casey-tablet",
+   "wave": "6dc6e9bada4edf6a75c69a58ac3e867067d5d3ce8799b9e652eef3b62605c870",
+   "note": "casey-tablet signs its manifest: same heads, same state."
+  },
+  {
+   "utc": "2026-09-23T09:10:00.000Z",
+   "who": "drew-desktop",
+   "wave": "8d0f410445834f4eee132a5e6d64f9babb97f84d6b6adc58d4c6c230b15b6995",
+   "note": "drew-desktop signs its manifest: same heads, same state."
+  }
+ ],
+ "crossings": [
+  {
+   "what": "Blake's phone task, as Avery's laptop app would read it",
+   "source": "29a20deff3bb2c062b474fbea855179b48fe911c0926497abf740d7cd05c585f",
+   "member": "avery-laptop",
+   "outcome": "refused",
+   "code": "REFUSE_CROSSING",
+   "reason": "No lens version expresses this message in the target schema exactly; the Hive will not invent missing fields."
+  },
+  {
+   "what": "Avery's laptop task, as Blake's phone app would read it",
+   "source": "74b2777228ea3c814d5ac04c378dd5113f0322a94708adcf283d73bb015866f5",
+   "member": "blake-phone",
+   "outcome": "crossed",
+   "payload": {
+    "assignee": "avery",
+    "id": "T-100",
+    "operation": "task",
+    "profile": "contoso-tasks/1",
+    "text": "Draft the onboarding checklist"
+   },
+   "not_expressible_in_target": [
+    "due"
+   ],
+   "dropped_by_forward_lens": [],
+   "lossless": false
+  },
+  {
+   "what": "Casey's tablet task, as Avery's laptop app would read it",
+   "source": "45ef3d674de8fd20a30c5de1fb9fd09a848fd0dadf1e7f4fc16d70164d62f068",
+   "member": "avery-laptop",
+   "outcome": "crossed",
+   "payload": {
+    "due": "2026-09-27",
+    "operation": "task",
+    "owner": "casey",
+    "profile": "contoso-tasks/1",
+    "task_id": "T-105",
+    "title": "Sketch the welcome poster"
+   },
+   "not_expressible_in_target": [],
+   "dropped_by_forward_lens": [],
+   "lossless": true
+  }
+ ],
+ "plan_particle": "0e80ba5df8c7957866c0888133ac061a6ce0e1467b0406be0906a128ee924634"
+}

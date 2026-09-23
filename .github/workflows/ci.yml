@@ -1,0 +1,46 @@
+name: model-hive
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python: ["3.12"]
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+    env:
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - name: Install the one dependency
+        run: python -m pip install "cryptography>=43"
+      - name: The model and tour are exactly what the reference builds
+        run: python -B tools/build.py --check
+      - name: The page is exactly what its sources build
+        run: python -B tools/build_app.py --check
+      - name: The browser engine matches every conformance vector
+        run: node tests/parity.mjs
+      - name: Conformance vectors through the reference command line
+        working-directory: vendor
+        run: python -B -m rapp_hive2 vectors --check ../conformance/vectors.json
+      - name: Tests (the page is also rendered in headless Chrome)
+        run: python -B -m unittest discover -s tests -v

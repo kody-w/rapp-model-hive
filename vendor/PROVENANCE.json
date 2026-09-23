@@ -1,0 +1,27 @@
+{
+  "schema": "rapp-model-hive-vendor/1",
+  "repository": "https://github.com/kody-w/rapp-workspace",
+  "branch": "experimental/frontier-rapp-hive-2",
+  "commit": "c31ba7496caf5c95d5e901e1bd860d2783f13ef8",
+  "source": "protocols/rapp-hive/2/reference/rapp_hive2",
+  "files_sha256": {
+    "rapp_hive2/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rapp_hive2/__main__.py": "9da1279d3a5a2427179a20893b67ae7e4832f5475c6c47afc8fe8959a7502838",
+    "rapp_hive2/crossing.py": "9d3e89c7d9105e0e8fc50dbd42269436f73f892444740329247a9849e7f6e694",
+    "rapp_hive2/hive.py": "08837efcaa3c3acf096a4dfc8f2f38d81f964b045c6b28aa035fd1ebaea1c83e",
+    "rapp_hive2/lens.py": "4a26433e3c4c5306378df7755b10f9511b2d3b62e37c63b5bfd710808c7d33a2",
+    "rapp_hive2/migrate.py": "bb863affb0a6412ce1a2b321853093853f272463bf299f5b763009689513d8f1",
+    "rapp_hive2/model.py": "189df0c7cab872ca2ec8637c6bce048907fc488bbb10306395620db9c171988c",
+    "rapp_hive2/rapp1.py": "2f564c56fb322a13af3910642903a6a64903ec63f43c6dac4329be49c83ef1fa",
+    "rapp_hive2/schema.py": "0cf2d9a7c22595a6e15405ce84a1c3df842342c8bb7f778155d2dc668b61d23d",
+    "rapp_hive2/sign.py": "cb224e81e5e023db1fba79835815ad5ba9c2fdcb73c5f74b45a211a7f52fef56",
+    "rapp_hive2/store.py": "a3019971f27d7218bdf4c37536eac2d70465253cc6b803fa8d4c4281e7e86c02",
+    "rapp_hive2/vectors.py": "59e329033f1152c9c6d7e85244ba420cfa503e93f38e0c6175f7202682b84eb5"
+  },
+  "conformance": {
+    "path": "protocols/rapp-hive/2/conformance/vectors.json",
+    "sha256": "55447775e8e3f9a60968a1ec867027a5183ad02b7fb7c0a3ee829fe5a916c6b1"
+  },
+  "track": "experimental-frontier",
+  "ring": "canary"
+}
