@@ -1319,7 +1319,12 @@ class Parity(unittest.TestCase):
                 ha.sshsig_verify(sig, message, space)
 
     def test_no_instruction_file_is_kept_anywhere_but_the_root(self):
-        tracked = subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True).stdout.decode().split("\0")
+        listed = subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True)
+        tracked = [p for p in listed.stdout.decode().split("\0") if p] if listed.returncode == 0 else []
+        if not tracked:  # a downloaded copy without .git: look at the files themselves
+            for folder, dirs, files in os.walk(REPO):
+                dirs[:] = [d for d in dirs if d != ".git"]
+                tracked += [os.path.relpath(os.path.join(folder, f), REPO).replace(os.sep, "/") for f in files]
         names = {"agents.md", "claude.md", "gemini.md", "skill.md", "copilot-instructions.md"}
         self.assertEqual(sorted(p for p in tracked if p.rsplit("/", 1)[-1].lower() in names), ["AGENTS.md", "CLAUDE.md"])
 
