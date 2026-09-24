@@ -1,5 +1,6 @@
 ---
 hive: 185d0eb5d4b1247b260042d0d840d5c3
+version: 2
 approvals: 2
 fields: id=task_id,id; title=title,summary,text; owner=owner,assignee; due=due; status=status
 previous:

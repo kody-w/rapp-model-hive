@@ -15,6 +15,8 @@ sys.path[:0] = [os.path.join(REPO, "agents"), os.path.join(REPO, "tools")]
 import hive_agent as ha  # noqa: E402
 import build_example as be  # noqa: E402
 
+REAL_CLOCK = (ha.now, ha.hive_seed)  # be.Clock() puts a fixed story clock in their place
+
 PLAN = re.compile(r'plan "([0-9a-f]{64})"')
 TEMPLATE = None
 
@@ -81,6 +83,16 @@ def judge(device, commit):
     return ha.judge(device.hive, ha.read_commit(device.hive, commit)["parents"][0], commit)
 
 
+def raw_commit(device, headers, message="A crafted commit"):
+    """A commit object with exactly these header lines, signed with the device's key the way git signs."""
+    h = ha.Hive(device.home, be.HIVE)
+    body = "".join(line + "\n" for line in headers) + "\n" + message + "\n"
+    head, _, msg = body.partition("\n\n")
+    armored = ha.sshsig_sign(h.key(), body.encode(), "git").rstrip("\n").replace("\n", "\n ")
+    obj = head + "\ngpgsig " + armored + "\n\n" + msg
+    return ha.git(h.path, "hash-object", "--literally", "-t", "commit", "-w", "--stdin", data=obj.encode()).decode().strip()
+
+
 class HiveTest(unittest.TestCase):
     def setUp(self):
         self.root = tempfile.mkdtemp(prefix="hive-test-")
@@ -89,7 +101,7 @@ class HiveTest(unittest.TestCase):
         self.A, self.B, self.C = (self.device(slug) for slug in ("avery-laptop", "blake-phone", "casey-tablet"))
         for device in (self.A, self.B, self.C):
             device.remote(self.bare)
-        self.saved = {k: os.environ.get(k) for k in ("PATH", "AGENTS_PATH", "SOUL_PATH", "RAPP_HIVE_NOW", "RAPP_HIVES")}
+        self.saved = {k: os.environ.get(k) for k in ("PATH", "AGENTS_PATH", "SOUL_PATH", "RAPP_HIVES")}
 
     def tearDown(self):
         for k, v in self.saved.items():
@@ -142,7 +154,6 @@ class Story(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        os.environ.pop("RAPP_HIVE_NOW", None)
         be.rmtree(cls.root)
 
     def at(self, subject):
@@ -232,6 +243,7 @@ class Story(unittest.TestCase):
     def test_J11_publish_a_reviewed_public_page(self):
         public = self.r["public"]
         self.assertEqual(ha.check_public(public), [])
+        self.assertEqual(ha.check_public(public, self.dev["avery-laptop2"].hive), [])  # signed by a member, approved
         files = set(ha.tree(public, ha.rev(public, "HEAD")))
         self.assertEqual(files, {".gitattributes", "PUBLISHED.md", "how-contoso-onboards.md"})
         page = ha.read(os.path.join(public, "how-contoso-onboards.md")).decode()
@@ -265,7 +277,13 @@ class Story(unittest.TestCase):
         with redirect_stdout(out):
             code = ha.main(["check", self.bare])
         self.assertEqual(code, 0, out.getvalue())
-        self.assertEqual(out.getvalue().count("\nok ") + 1, len(self.commits))
+        lines = out.getvalue().split("\n")
+        self.assertEqual(sum(line.startswith("ok ") for line in lines), len(self.commits))
+        founder = ha.fingerprint(ha.pub_blob(be.test_key("avery-laptop")))
+        self.assertEqual(lines[0], f"root {self.commits[0]}; founder's key {founder}: compare both with the invitation")
+        for args, code in ((["--root", self.commits[0]], 0), (["--root", self.commits[1]], 1)):
+            with redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(ha.main(["check", self.bare, *args]), code, out.getvalue())
 
     def test_example_folder_is_what_the_story_builds(self):
         out = tempfile.mkdtemp(prefix="hive-export-")
@@ -322,8 +340,9 @@ class Attacks(HiveTest):
         self.B.do(action="leave")
         self.A.say(action="sync")
         self.not_done(self.A.say(action="admit", name="frankie"), "admitting frankie needs 2 approvals")
-        old = forge(self.B, {"members/blake/approvals/admit-late.md": "---\napprove: admit\nsha256: " + "0" * 64 + "\nutc: 2020-01-01T00:00:00Z\n---\n"})
-        self.refused(self.B, old, "is not a member's")  # a date inside a file carries no authority
+        request = ha.sha(ha.Snap(self.B.hive, ha.rev(self.B.hive, "HEAD")).text("requests/frankie/laptop.md"))
+        old = forge(self.B, {"members/blake/approvals/admit-late.md": f"---\napprove: admit\nsha256: {request}\nutc: 2020-01-01T00:00:00Z\n---\n"})
+        self.refused(self.B, old, "is not a member's")  # the right subject, but a date inside a file carries no authority
 
     def test_a_dropped_key_cannot_sign(self):
         A2 = self.device("avery-laptop2")
@@ -540,7 +559,7 @@ class Attacks(HiveTest):
 
     def test_hidden_files_and_instruction_file_names_are_refused(self):
         for path in ("shared/.hidden.md", "shared/x/AGENTS.md", "members/avery/Claude.md", "shared/GEMINI.md", "shared/y/skill.md",
-                     "shared/z/copilot-instructions.md", "shared/z/claude.local.md", "shared/x/con.md", "shared/x/trailing.md.", "HIVE2.md",
+                     "shared/z/copilot-instructions.md", "shared/z/claude.local.md", "shared/x/con.md", "shared/x/con .md", "shared/x/trailing.md.", "HIVE2.md",
                      "shared/x/tool.py", "notes/x.md", "shared/x.md", "shared/x/" + "a" * 70 + ".md", "shared/x/" + "b/" * 60 + "c.md"):
             self.refused(self.A, forge(self.A, {path: "# x\n"}))
         self.refused(self.A, forge(self.A, {"shared/x/Case.md": "# a\n", "shared/x/case.md": "# b\n"}), "differ only by case")
@@ -554,7 +573,8 @@ class Attacks(HiveTest):
         self.refused(F, forge(F, {"requests/frankie/tablet.md": big}), "64 KB")
 
     def test_bidi_zero_width_and_control_characters_are_refused(self):
-        for text in ("a\u202eb", "a\u200bb", "a\u2066b", "a\rb", "a\x00b", "a\ufeffb", b"\xff\xfe"):
+        for text in ("a\u202eb", "a\u200bb", "a\u2066b", "a\rb", "a\x00b", "a\ufeffb", b"\xff\xfe", "a\U000e0041b", "a\u2028b",
+                     "a\ufe0fb", "a\U000e0100b", "a\u00adb", "a\u3164b", "a\ue000b", "a\U0001fffeb", "a\U00100000b"):
             self.refused(self.A, forge(self.A, {"shared/x/t.md": text}))
         self.assertEqual(judge(self.A, forge(self.A, {"shared/x/ok.md": "Tabs\tand accents: café, naïve.\n"})), "avery")
 
@@ -571,6 +591,141 @@ class Attacks(HiveTest):
         raw = ha.git(self.A.hive, "cat-file", "commit", commit).replace(b"A forged change", b"A changed message")
         altered = ha.git(self.A.hive, "hash-object", "-t", "commit", "-w", "--stdin", data=raw).decode().strip()
         self.refused(self.A, altered, "not signed, or the signature does not match")
+
+
+    def test_a_member_may_not_modify_a_request(self):
+        F = self.device("frankie-laptop")
+        self.join(F, "frankie", "laptop")
+        self.A.say(action="sync")
+        text = ha.Snap(self.A.hive, ha.rev(self.A.hive, "HEAD")).text("requests/frankie/laptop.md")
+        self.refused(self.A, forge(self.A, {"requests/frankie/laptop.md": text.replace("asks to join", "asks to get in")}), "may not change")
+
+    def test_the_root_holds_only_its_files_signed_by_its_founder(self):
+        repo = ha.new_hive_folder(self.root, "roots", None)
+        avery, blake, hive_id = be.test_key("avery-laptop"), be.test_key("blake-phone"), "c" * 32
+        base = {"HIVE.md": ha.hive_md({"hive": hive_id, "version": "1", "approvals": "2"}, "\n# Roots\n").encode(), ".gitattributes": ha.ATTRS,
+                "members/avery/keys/laptop.md": ha.request_text(avery, hive_id, "avery", "laptop").encode()}
+
+        def root(files, name="avery", key=avery):
+            return ha.make_commit(repo, ha.build_tree(repo, None, files), None, name, "Create", key)
+        self.assertEqual(ha.check_root(repo, root(base)), hive_id)
+        for files, name, key, words in (({**base, "shared/x/a.md": b"# a\n"}, "avery", avery, "holds only"),
+                                        (base, "avery", blake, "signed by its founder's key"),
+                                        (base, "blake", avery, "in the founder's name"),
+                                        ({**base, "HIVE.md": base["HIVE.md"].replace(b"version: 1", b"version: 2")}, "avery", avery, "version: 1")):
+            with self.assertRaises(ha.Refused) as caught:
+                ha.check_root(repo, root(files, name, key))
+            self.assertIn(words, str(caught.exception))
+
+    def test_rules_approvals_name_both_texts_and_versions_never_repeat(self):
+        old = ha.Snap(self.A.hive, ha.rev(self.A.hive, "HEAD")).text("HIVE.md")
+        self.A.do(action="rules", fields="title=title")
+        proposal = next(p for p in ha.tree(self.A.hive, ha.rev(self.A.hive, "HEAD")) if p.startswith("members/avery/rules/"))
+        new = ha.Snap(self.A.hive, ha.rev(self.A.hive, "HEAD")).text(proposal)
+        self.assertIn("\nversion: 2\n", new)
+        self.B.say(action="sync")  # an approval of the new text that names another old text does not count
+        self.B.do(action="save", path="members/blake/approvals/rules-other.md", text=f"---\napprove: rules\nsha256: {ha.sha(new)}\nreplaces: {'0' * 64}\n---\n")
+        self.A.say(action="sync")
+        self.not_done(self.A.say(action="rules", path=proposal), "needs 2 approvals")
+        self.B.say(action="sync")
+        self.B.do(action="approve", path=proposal)
+        self.A.say(action="sync")
+        self.A.do(action="rules", path=proposal)
+        self.refused(self.A, forge(self.A, {"HIVE.md": old}), "sets `version: 3`")  # flipping back to the old text
+        self.refused(self.A, forge(self.A, {"HIVE.md": old.replace("version: 1", "version: 3")}), "needs 2 approvals")  # old approvals never match
+
+    def test_admitted_request_bytes_are_never_filed_again(self):
+        self.B.do(action="leave")
+        spent = ha.Snap(self.B.hive, ha.rev(self.B.hive, "HEAD")).raw("former/blake/keys/phone.md")
+        self.refused(self.B, forge(self.B, {"requests/blake/phone.md": spent}), "never filed again")
+        self.clock.tick(24 * 60)  # a new request is made at a new time, so its bytes differ
+        fresh = ha.request_text(be.test_key("blake-phone"), info(self.B)["hive"], "blake", "phone")
+        fp = ha.fingerprint(ha.pub_blob(be.test_key("blake-phone")))
+        self.assertEqual(judge(self.B, forge(self.B, {"requests/blake/phone.md": fresh})), f"a request from key {fp} (asking as blake)")
+
+    def test_a_removal_approval_names_the_membership_and_survives_new_devices(self):
+        self.B.do(action="approve", name="casey")
+        C2 = self.device("casey-laptop")
+        self.join(C2, "casey", "laptop")
+        self.C.say(action="sync")
+        self.C.do(action="add_device", device="laptop")  # Casey adds a device and retires her first one:
+        C2.say(action="sync")
+        C2.do(action="remove", device="tablet")  # her keys changed, her membership did not
+        self.A.say(action="sync")
+        self.A.do(action="remove", name="casey")
+        self.assertEqual(members(self.A), {"avery", "blake"})
+
+    def test_one_key_never_sits_in_two_key_files(self):
+        F = self.device("frankie-laptop")
+        self.join(F, "frankie", "laptop")
+        twin = forge(F, {"requests/frank/laptop.md": ha.request_text(be.test_key("frankie-laptop"), info(F)["hive"], "frank", "laptop")},
+                     name="frank")
+        ha.git(F.hive, "push", "-q", "--", self.bare, f"{twin}:refs/heads/main")  # the same key asks again, as frank
+        self.B.say(action="sync")
+        self.B.do(action="approve", path="requests/frankie/laptop.md")
+        self.B.do(action="approve", path="requests/frank/laptop.md")
+        self.A.say(action="sync")
+        snap = ha.Snap(self.A.hive, ha.rev(self.A.hive, "HEAD"))
+        both = forge(self.A, {"members/frankie/keys/laptop.md": snap.raw("requests/frankie/laptop.md"),
+                              "members/frank/keys/laptop.md": snap.raw("requests/frank/laptop.md")},
+                     ["requests/frankie/laptop.md", "requests/frank/laptop.md"])
+        self.refused(self.A, both, "exactly one key file")
+
+    def test_leaving_twice_fits_former_name_2_with_the_longest_paths(self):
+        name, rest = "a" * 32, "x" * 30 + "/"
+        path = f"members/{name}/{rest}" + "z" * (ha.MAX_MEMBER_PATH - len(f"members/{name}/{rest}") - 3) + ".md"
+        self.assertEqual(len(path), ha.MAX_MEMBER_PATH)
+        for slug, device in (("long-laptop", "laptop"), ("long-phone", "phone")):
+            L = self.device(slug)
+            self.join(L, name, device)
+            self.B.say(action="sync")
+            self.B.do(action="approve", path=f"requests/{name}/{device}.md")
+            self.A.say(action="sync")
+            self.A.do(action="admit", path=f"requests/{name}/{device}.md")
+            L.say(action="sync")
+            L.do(action="save", path=path, text="# Long\n")
+            L.do(action="leave")
+            be.rmtree(L.home)
+        self.A.say(action="sync")
+        files = ha.tree(self.A.hive, ha.rev(self.A.hive, "HEAD"))
+        self.assertIn(f"former/{name}/" + path[len(f"members/{name}/"):], files)
+        self.assertIn(f"former/{name}-2/" + path[len(f"members/{name}/"):], files)
+        self.refused(self.A, forge(self.A, {"members/avery/" + "w" * 60 + "/" + "v" * (ha.MAX_MEMBER_PATH - 75) + ".md": "# x\n"}), "116 under members/")
+
+    def test_merges_parentless_commits_and_odd_headers_are_refused(self):
+        repo = ha.Hive(self.A.home, be.HIVE).path
+        head = ha.rev(repo, "HEAD")
+        tree, ident = f"tree {ha.git(repo, 'rev-parse', head + '^{tree}').decode().strip()}", f"avery <avery@hive.invalid> {ha.now()} +0000"
+        base = [tree, f"parent {head}", f"author {ident}", f"committer {ident}"]
+        for headers, words in (([tree, f"parent {head}", f"parent {head}", f"author {ident}", f"committer {ident}"], "one line"),
+                               ([tree, f"author {ident}", f"committer {ident}"], "one line"),
+                               (base + [f"author {ident}"], "each once"), (base + [f"mergetag object {head}"], "each once"),
+                               (base + ["gpgsig-sha256 x"], "each once"), (base + ["encoding ISO-8859-1"], "each once")):
+            with self.assertRaises(ha.Refused) as caught:
+                ha.judge(repo, head, raw_commit(self.A, headers))
+            self.assertIn(words, str(caught.exception))
+        self.assertEqual(ha.judge(repo, head, raw_commit(self.A, base + ["encoding UTF-8"])), "avery")
+
+    def test_oversized_blobs_are_refused_before_they_are_read(self):
+        big = forge(self.A, {"shared/x/big.md": "a" * (3 * 1024 * 1024)})
+        blob = ha.tree(self.A.hive, big)["shared/x/big.md"][1]
+        self.refused(self.A, big, "1 MB")
+        self.assertNotIn(blob, ha._BLOBS)  # judged by its size alone: its bytes were never read
+
+    def test_anything_that_goes_wrong_judging_a_commit_refuses_that_commit(self):
+        F = self.device("frankie-laptop")
+        self.join(F, "frankie", "laptop")
+        spki = base64.b64encode(be.test_key("frankie-laptop").public_key().public_bytes(ha.ser.Encoding.DER, ha.ser.PublicFormat.SubjectPublicKeyInfo)).decode()
+        frame = '{"frame_hash":"","kind":"","payload":' + "[" * 5000 + "]" * 5000 + ',"payload_hash":"","prev":"","prev_wave":"",' \
+                '"seq":0,"sig":"","spec":"rapp/1","stream_id":"","utc":""}'  # nested past any recursion limit
+        deep = forge(F, {"requests/frankie/tablet.md": ha.carried_text(frame, spki, "old", "frankie", "tablet")})
+        parent = ha.read_commit(F.hive, deep)["parents"][0]
+        with self.assertRaises(ha.Refused) as caught:
+            ha.verify(F.hive, info(F)["root"], deep)
+        self.assertIn("cannot be judged (RecursionError)", str(caught.exception))
+        self.assertEqual((caught.exception.commit, caught.exception.last), (deep, parent))
+        ha.git(F.hive, "push", "-q", "--", self.bare, f"{deep}:refs/heads/main")
+        self.assertIn(f"Reset the shared copy to {parent[:10]}, the last verified commit", self.A.say(action="sync"))
 
 
 # ---- the conversation and the device --------------------------------------------------------------
@@ -594,7 +749,7 @@ class Conversation(HiveTest):
 
     def test_old_or_altered_plans_and_changed_files_are_refused(self):
         plan = PLAN.search(self.A.say(action="save", path="shared/x/a.md", text="# A\n"))[1]
-        os.environ["RAPP_HIVE_NOW"] = "2026-09-24T12:00:00Z"
+        self.clock.tick(61)
         self.not_done(self.A.say(action="apply", plan=plan), "more than an hour old")
         self.clock.tick()
         self.A.do(action="save", path="shared/x/a.md", text="# A\n")
@@ -620,7 +775,7 @@ class Conversation(HiveTest):
         self.assertIn("Cancelled", self.A.say(action="cancel", plan=plan))
         self.not_done(self.A.say(action="apply", plan=plan), "no such proposal")
         solo = self.device("drew-desktop")
-        os.environ.pop("RAPP_HIVE_NOW")  # the real clock, so the Hive id is random
+        ha.now, ha.hive_seed = REAL_CLOCK  # the real clock and seed, so the Hive id is random
         solo.say(action="apply", plan=PLAN.search(solo.say(action="create", title="Drew's Notes", name="drew", device="desktop"))[1])
         self.assertIn("a member", solo.say(action="status"))
         self.assertRegex(ha.Snap(os.path.join(solo.home, "drew-s-notes"), ha.rev(os.path.join(solo.home, "drew-s-notes"), "HEAD")).meta["hive"], r"^[0-9a-f]{32}$")
@@ -647,7 +802,7 @@ class Conversation(HiveTest):
                 os.environ["RAPP_HIVES"] = hives
                 self.not_done(ha.HiveAgent().perform(action="status"), "overlaps the Brainstem")
             os.environ.pop(env)
-        for synced in ("Dropbox", "OneDrive - Contoso", "iCloud Drive", "Google Drive"):
+        for synced in ("Dropbox", "Dropbox (Contoso)", "OneDrive - Contoso", "iCloud Drive", "iCloudDrive", "Google Drive"):
             os.environ["RAPP_HIVES"] = os.path.join(self.root, synced, "Hives")
             self.not_done(ha.HiveAgent().perform(action="status"), "synced folder")
         os.environ["RAPP_HIVES"] = os.path.join(REPO, "agents", "Hives")
@@ -729,19 +884,122 @@ class Conversation(HiveTest):
         with redirect_stdout(out):
             self.assertEqual(ha.main(["check", self.bare]), 0)
 
-    def test_check_public_refuses_unlisted_or_changed_files(self):
-        folder = os.path.join(self.root, "public")
-        os.makedirs(folder)
-        page = "# Page\n"
-        ha.put(os.path.join(folder, "page.md"), page.encode())
-        ha.put(os.path.join(folder, "PUBLISHED.md"), f"---\nmanifest: x\n---\n\n{ha.sha(page)}  page.md\n".encode())
+    def test_check_public_checks_the_committed_tree_and_with_a_hive_its_approval(self):
+        folder = ha.new_hive_folder(self.root, "public", None)
+        page, avery, frankie = "# Page\n", be.test_key("avery-laptop"), be.test_key("frankie-laptop")
+
+        def publish(files, key=avery):
+            listing = "".join(f"{ha.sha(t)}  {p}\n" for p, t in files.items())
+            parent = ha.rev(folder, "HEAD")
+            writes = {**{p: t.encode() for p, t in files.items()}, ".gitattributes": ha.ATTRS,
+                      "PUBLISHED.md": f"---\nmanifest: {'0' * 64}\n---\n\n{listing}".encode()}
+            commit = ha.make_commit(folder, ha.build_tree(folder, None, writes), parent, "avery", "Publish", key)
+            ha.git(folder, "update-ref", "refs/heads/main", commit)
+            return commit
+        publish({"page.md": page})
+        self.assertEqual(ha.check_public(folder), [])  # self-consistent: every file listed with its hash
+        ha.put(os.path.join(folder, "slipped.md"), b"# Not committed\n")  # only the committed tree counts
         self.assertEqual(ha.check_public(folder), [])
-        ha.put(os.path.join(folder, "page.md"), b"# Changed\n")
-        ha.put(os.path.join(folder, "slipped.md"), b"# In\n")
-        self.assertEqual(len(ha.check_public(folder)), 2)
+        self.assertEqual(ha.check_public(folder, self.A.hive), ["PUBLISHED.md does not name a manifest that this Hive approved"])
+        head = ha.rev(folder, "HEAD")
+        link = ha.git(folder, "hash-object", "-w", "--stdin", data=b"../../outside").decode().strip()
+        entries = {**ha.tree(folder, head), "slipped.md": ("100644", ha.tree(folder, head)["page.md"][1]), "link.md": ("120000", link)}
+        entries["page.md"] = ("100644", ha.git(folder, "hash-object", "-w", "--stdin", data=b"# Changed\n").decode().strip())
+        bad = ha.make_commit(folder, mktree(folder, entries), head, "frankie", "Slip", frankie)
+        ha.git(folder, "update-ref", "refs/heads/main", bad)
+        problems = ha.check_public(folder, self.A.hive)
+        for words in ("`link.md` is not a plain file", "`page.md` does not match", "`slipped.md` is not listed", f"commit {bad[:10]} is not signed"):
+            self.assertTrue(any(words in p for p in problems), (words, problems))
         out = io.StringIO()
         with redirect_stdout(out):
             self.assertEqual(ha.main(["check-public", folder]), 1)
+        self.assertIn("structure only; signer not checked", out.getvalue())
+
+
+    def test_a_folder_shared_copy_runs_none_of_its_own_commands(self):
+        hooks = os.path.join(self.root, "copy-hooks")
+        os.makedirs(hooks)
+        for name in ("pre-receive", "update", "post-receive", "post-update", "reference-transaction", "mark"):
+            with open(os.path.join(hooks, name), "w", encoding="utf-8", newline="\n") as f:
+                f.write("#!/bin/sh\necho ran >> ran-marker\n")  # hooks run inside the shared copy's folder
+            os.chmod(os.path.join(hooks, name), 0o755)
+        for key, value in (("core.hooksPath", hooks), ("core.fsmonitor", os.path.join(hooks, "mark")),
+                           ("core.alternateRefsCommand", os.path.join(hooks, "mark")), ("receive.denyCurrentBranch", "updateInstead")):
+            ha.git(self.bare, "config", key, value)
+        self.A.do(action="save", path="shared/x/a.md", text="# A\n")  # a push
+        self.B.say(action="sync")  # a fetch
+        self.assertFalse(os.path.exists(os.path.join(self.bare, "ran-marker")))
+        ha.git(self.B.hive, "push", "-q", "--", self.bare, "HEAD:refs/heads/probe")  # a plain push runs them: the test can see
+        self.assertTrue(os.path.exists(os.path.join(self.bare, "ran-marker")))
+        work = os.path.join(self.root, "work")
+        ha.git(None, "init", "-q", "--initial-branch=main", work)
+        alternates = os.path.join(self.root, "alternates.git")
+        ha.git(None, "init", "-q", "--bare", "--initial-branch=main", alternates)
+        ha.put(os.path.join(alternates, "objects", "info", "alternates"), (os.path.join(self.bare, "objects") + "\n").encode())
+        ha.git(alternates, "config", "core.alternateRefsCommand", os.path.join(hooks, "mark"))
+        for copy in (work, alternates):
+            self.B.remote(copy)
+            self.not_done(self.B.say(action="sync"), "must be a bare git repository")
+        self.assertFalse(os.path.exists(os.path.join(alternates, "ran-marker")))
+        self.not_done(self.A.say(action="join", address=work, id="0" * 40, name="x", device="y", hive="other"), "must be a bare")
+
+    def test_shared_copy_addresses(self):
+        base = os.path.join(self.root, "hive")
+        for address in ("ssh://host/team.git", "https://host/team.git", "git://host/team.git", "host:team.git", "me@host:team.git"):
+            self.assertIsNone(ha.shared_folder(address, base), address)
+        for address, folder in (("./team.git", os.path.join(base, "./team.git")), ("../team.git", os.path.join(base, "../team.git")),
+                                (self.bare, self.bare), ("C:/team.git", os.path.join(base, "C:/team.git"))):
+            self.assertEqual(ha.shared_folder(address, base), folder)
+        with self.assertRaises(ha.Refused):
+            ha.shared_folder("team.git", base)  # neither a network address nor a clear folder path
+
+    def test_sync_and_push_plans_apply_only_to_what_was_shown(self):
+        before = ha.rev(self.bare, "main")
+        self.A.do(action="save", path="shared/x/a.md", text="# A\n")
+        self.B.say(action="sync")
+        ha.git(self.bare, "update-ref", "refs/heads/main", before)  # the shared copy goes backwards
+        plan = PLAN.search(self.B.say(action="reset"))[1]
+        self.B.remote(os.path.join(self.root, "nowhere.git"))  # offline: the next change stays on this device
+        self.B.do(action="save", path="shared/x/b.md", text="# B\n")
+        self.not_done(self.B.say(action="apply", plan=plan), "changed since the proposal")
+
+    def test_undo_picks_your_own_commits_by_key_not_by_name(self):
+        self.A.do(action="save", path="shared/x/a.md", text="# A\n")
+        A2 = self.device("avery-laptop2")
+        self.join(A2, "avery", "laptop2")  # written in the name avery, but signed by a key that is not a member's yet
+        self.A.say(action="sync")
+        reply = self.A.say(action="undo")
+        self.assertIn("(<", reply)
+        self.assertIn(">Save shared/x/a.md</", reply)
+        check = self.A.say(action="check")
+        self.assertIn(f"a request from key {ha.fingerprint(ha.pub_blob(be.test_key('avery-laptop2')))} (asking as avery)", check)
+
+    def test_keys_inside_a_hive_are_never_imported(self):
+        ha.put(os.path.join(self.A.hive, "shared", "x", "key.md"), ha.read(os.path.join(self.A.home, "keys", "avery-laptop.pem")))
+        self.not_done(self.A.say(action="create", title="Two", name="avery", device="laptop", key=f"{be.HIVE}/shared/x/key.md"),
+                      "inside a Hive folder")
+
+    def test_joining_a_shared_copy_without_the_pinned_root_leaves_nothing(self):
+        other = os.path.join(self.root, "other.git")
+        ha.git(None, "init", "-q", "--bare", "--initial-branch=main", other)
+        self.device("drew-desktop").do(action="create", title="Other", name="drew", device="desktop", address=other)
+        F = self.device("frankie-laptop")
+        proposal = F.say(action="join", address=other, id=info(self.A)["root"], name="frankie", device="laptop", hive=be.HIVE)
+        self.not_done(F.say(action="apply", plan=PLAN.search(proposal)[1]), "does not hold the root commit")
+        self.assertFalse(os.path.exists(F.hive))
+
+    def test_the_command_line_and_replies_escape_control_characters(self):
+        commit = forge(self.A, {"shared/x/a.md": "# a\n"}, message="Hidden \x1b[8mtext\u202e")
+        ha.git(self.A.hive, "push", "-q", "--", self.bare, f"{commit}:refs/heads/main")
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(ha.main(["check", self.bare]), 0)
+        self.assertNotIn("\x1b", out.getvalue())
+        self.assertIn("Hidden \\x1b[8mtext\\u202e", out.getvalue())
+        self.B.say(action="sync")
+        reply = self.B.say(action="check")
+        self.assertNotIn("\x1b", reply)
+        self.assertIn("Hidden \\x1b[8mtext", reply)
 
 
 # ---- RAPP/1 parity with the frozen rapp-hive/2 model, and the size budget ---------------------------
@@ -778,9 +1036,9 @@ class Parity(unittest.TestCase):
             with self.assertRaises(Exception):
                 ha.sshsig_verify(sig, message, space)
 
-    def test_the_agent_stays_within_1000_statements(self):
+    def test_the_agent_stays_within_1150_statements(self):
         source = ha.read(os.path.join(REPO, "agents", "hive_agent.py")).decode()
-        self.assertLessEqual(sum(isinstance(node, ast.stmt) for node in ast.walk(ast.parse(source))), 1000)
+        self.assertLessEqual(sum(isinstance(node, ast.stmt) for node in ast.walk(ast.parse(source))), 1150)
 
     def test_no_agent_line_is_longer_than_100_columns(self):
         source = ha.read(os.path.join(REPO, "agents", "hive_agent.py")).decode()

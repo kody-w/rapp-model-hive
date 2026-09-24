@@ -6,10 +6,10 @@ what that tree's rules allow. Nothing inside a Hive is ever run. Needs Python 3.
 and git.
 
 Checker:
-    python agents/hive_agent.py check <hive-folder> [--since <commit>]
-    python agents/hive_agent.py check-public <public-copy-folder>
+    python agents/hive_agent.py check <hive-folder> [--since <commit>] [--root <commit>]
+    python agents/hive_agent.py check-public <public-copy-folder> [--hive <hive-folder>]
 """
-import base64, hashlib, json, os, re, secrets, shutil, subprocess, sys, time, unicodedata
+import base64, hashlib, json, os, re, secrets, shlex, shutil, subprocess, sys, time, unicodedata
 from datetime import datetime, timezone
 from functools import cached_property
 
@@ -31,27 +31,37 @@ INSTRUCTION_NAMES = {
 RESERVED = {"con", "prn", "aux", "nul", *(f"com{i}" for i in range(1, 10)),
             *(f"lpt{i}" for i in range(1, 10))}
 SEGMENT = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._-]{0,63}")
-PERSON = re.compile(r"[a-z0-9][a-z0-9-]{0,38}")
+PERSON = re.compile(r"[a-z0-9][a-z0-9-]{0,31}")
+FORMER = re.compile(r"[a-z0-9][a-z0-9-]{0,31}(-([2-9]|[1-9][0-9]))?")  # former/<name>, -2 ... -99
 KEYFILE = re.compile(r"members/([^/]+)/keys/([^/]+)\.md")
+ANYKEY = re.compile(r"(members|former)/[^/]+/keys/[^/]+\.md")
 APPROVAL = re.compile(r"members/([^/]+)/approvals/[^/]+\.md")
 REQUEST = re.compile(r"requests/([^/]+)/([^/]+)\.md")
 MANIFEST = re.compile(r"members/[^/]+/publish/[^/]+\.md")
 RAPPID = re.compile(
     r"rappid:@([a-z0-9]+(?:-[a-z0-9]+)*)/([a-z0-9]+(?:-[a-z0-9]+)*):([0-9a-f]{64})")
+# Controls, invisible and private-use characters: a fixed list, so every device reaches the same
+# verdict (Unicode category tables differ between Python versions).
 BAD_TEXT = re.compile(
-    "[\x00-\x08\x0b-\x1f\x7f-\x9f\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]")
+    "[\x00-\x08\x0b-\x1f\x7f-\x9f\xad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f"
+    "\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufffb"
+    "\ufdd0-\ufdef\ue000-\uf8ff\U000e0000-\U000e0fff\U000f0000-\U0010ffff"
+    + "".join(chr(plane << 16 | 0xFFFE) + chr(plane << 16 | 0xFFFF) for plane in range(15)) + "]")
 SIGBLOCK = re.compile(
     r"\n```ssh-signature\n(-----BEGIN SSH SIGNATURE-----\n"
     r"[A-Za-z0-9+/=\n]+?-----END SSH SIGNATURE-----\n)```\n\Z")
 FRAMEBLOCK = re.compile(r"\n```rapp-frame\n(\{[^\n]*\})\n```\n")
-SYNCED = re.compile(
-    r"icloud drive|mobile documents|cloudstorage|dropbox|box|box sync|google ?drive|onedrive.*",
-    re.I)
+SYNCED = re.compile(r"icloud ?drive|mobile documents|cloudstorage|dropbox|dropbox \(.*\)|box|"
+                    r"box sync|google ?drive|onedrive.*", re.I)
 # What operating systems drop into folders; never proposed for saving.
 JUNK = re.compile(r"\.(?!gitattributes\Z).*|thumbs\.db|desktop\.ini", re.I)
 FRAME_KEYS = {"spec", "kind", "stream_id", "seq", "utc", "payload", "payload_hash", "frame_hash",
               "prev", "prev_wave", "sig"}
-MAX_FILE, MAX_REQUEST, MAX_PATH, HOUR = 1 << 20, 64 << 10, 120, 3600
+MAX_FILE, MAX_REQUEST, MAX_PATH, MAX_MEMBER_PATH, HOUR = 1 << 20, 64 << 10, 120, 116, 3600
+HEADERS = {"tree", "parent", "author", "committer", "gpgsig", "encoding"}
+# A folder shared copy's own settings for these never take effect when this device reaches it.
+PACK_FLAGS = ("core.alternateRefsCommand=true", "core.fsmonitor=false",
+              "receive.denyCurrentBranch=refuse", "receive.autogc=false", "gc.auto=0")
 GIT_FLAGS = ("commit.gpgsign=false", "submodule.recurse=false", "core.fsmonitor=false",
              "core.quotepath=off", "core.autocrlf=false", "protocol.ext.allow=never", "gc.auto=0")
 ARMOR = "-----BEGIN SSH SIGNATURE-----"
@@ -102,10 +112,16 @@ def hive_md(meta, body):
                               else f"{k}: {v}\n" for k, v in meta.items()) + "---\n" + body)
 
 
-def now():  # RAPP_HIVE_NOW fixes the clock for reproducible examples; time never carries authority
-    fixed = os.environ.get("RAPP_HIVE_NOW")
-    return (int(datetime.fromisoformat(fixed.replace("Z", "+00:00")).timestamp()) if fixed
-            else int(time.time()))
+def now():  # time never carries authority; the example builder and the tests replace this
+    return int(time.time())
+
+
+def hive_seed():  # the random part of a new Hive's id; the example builder replaces this
+    return secrets.token_bytes(16)
+
+
+def shown(text):  # Hive-made text (commit subjects, names) with control characters escaped
+    return BAD_TEXT.sub(lambda m: ascii(m[0])[1:-1], str(text))
 
 
 def utc():
@@ -170,7 +186,7 @@ def sshsig_verify(armored, message, namespace):
     pub, space, reserved, alg, sig = (_strings(blob[10:]) if blob[:10] == b"SSHSIG\0\0\0\1"
                                       else [b""] * 5)
     (kind, raw), (skind, sraw) = _strings(pub) or [b"", b""], _strings(sig) or [b"", b""]
-    if (space != namespace.encode() or alg != b"sha512" or kind != skind
+    if (space != namespace.encode() or reserved != b"" or alg != b"sha512" or kind != skind
             or kind != b"ssh-ed25519" or len(raw) != 32):
         raise ValueError(f"not an Ed25519 SHA-512 SSHSIG in the `{namespace}` namespace")
     Ed25519PublicKey.from_public_bytes(raw).verify(
@@ -319,16 +335,18 @@ def is_ancestor(repo, a, b):
     return git(repo, "merge-base", "--is-ancestor", a, b, ok=(0, 1)) is not None
 
 
-_TREES, _BLOBS = {}, {}
+_TREES, _BLOBS, _SIZES = {}, {}, {}
 
 
-def tree(repo, commit):  # {path: (mode, blob id)}; content-addressed, so it is cached
+def tree(repo, commit):  # {path: (mode, blob id)}; content-addressed, so it is cached (with sizes)
     if commit not in _TREES:
-        records = [r.split(b"\t", 1) for r in git(repo, "ls-tree", "-r", "-z", "--full-tree",
-                                                  commit).split(b"\0") if r]
-        _TREES[commit] = {p.decode("utf-8", "surrogateescape"): (m.split()[0].decode(),
-                                                                 m.split()[2].decode())
-                          for m, p in records}
+        files = {}
+        for record in git(repo, "ls-tree", "-r", "-l", "-z", "--full-tree", commit).split(b"\0"):
+            if record:
+                meta, path = record.split(b"\t", 1)
+                mode, _, oid, size = meta.decode().split()
+                files[path.decode("utf-8", "surrogateescape")], _SIZES[oid] = (mode, oid), size
+        _TREES[commit] = files
     return _TREES[commit]
 
 
@@ -352,13 +370,15 @@ def blob_id(data):
 def read_commit(repo, commit):  # headers, the signed payload (without gpgsig) and the signature
     head, _, msg = (git(repo, "cat-file", "commit", commit).decode("utf-8", "surrogateescape")
                     .partition("\n\n"))
-    info, kept, sig, current = {"parents": [], "author": None, "committer": None}, [], [], None
+    info = {"parents": [], "headers": [], "author": None, "committer": None}
+    kept, sig, current = [], [], None
     for line in head.split("\n"):
         if not (line.startswith(" ") and current):
             current, _, value = line.partition(" ")
+            info["headers"].append(current)
             if current == "parent":
                 info["parents"].append(value)
-            if current in ("author", "committer"):
+            if current in ("author", "committer", "encoding"):
                 info[current] = value.split(" <")[0]
         if current == "gpgsig":
             sig.append(line[7:] if line.startswith("gpgsig ") else line[1:])
@@ -397,7 +417,7 @@ def build_tree(repo, base, writes, deletes=()):
 
 class Snap:
     def __init__(self, repo, commit):
-        self.repo, self.files = repo, tree(repo, commit) if commit else {}
+        self.repo, self.commit, self.files = repo, commit, tree(repo, commit) if commit else {}
 
     def raw(self, path):
         return blobs(self.repo, [self.files[path][1]])[0]
@@ -428,40 +448,58 @@ class Snap:
                 if m[1] in self.members and m[1] != skip
                 and want <= front(self.text(m[0]))[0].items()}
 
-    def keys_hash(self, name):
-        return sha("\n".join(sorted(sha(self.text(p)) for p in self.files
-                                    if p.startswith(f"members/{name}/keys/"))))
+    # The membership a removal approval names: the hash of the request moved in when
+    # members/<name>/keys/ was last created (for the founder, the root's key file). A new device
+    # or a retired one does not change it; leaving and being admitted again does.
+    def admitted(self, name):
+        keys = f"members/{name}/keys/"
+        for c in git(self.repo, "rev-list", "--first-parent", self.commit, "--",
+                     keys[:-1]).decode().split():
+            parents = read_commit(self.repo, c)["parents"]
+            before = tree(self.repo, parents[0]) if parents else {}
+            if not any(p.startswith(keys) for p in before):
+                first = Snap(self.repo, c)
+                return sha(first.text(next(p for p in first.files if p.startswith(keys))))
+        return ""
 
 
 def name_rules(path):
     parts = path.split("/")
     if path in ("HIVE.md", ".gitattributes"):
         return
-    if parts[0] not in TOPS or len(parts) < 3 or len(path) > MAX_PATH or not path.endswith(".md"):
+    if (parts[0] not in TOPS or len(parts) < 3 or not path.endswith(".md") or len(path) > MAX_PATH
+            or parts[0] == "members" and len(path) > MAX_MEMBER_PATH):
         raise Refused(f"`{path}`: files sit in a folder under members/, requests/, shared/ or "
-                      f"former/, end in .md, and paths stay within {MAX_PATH} characters")
+                      f"former/, end in .md, and paths stay within {MAX_PATH} characters "
+                      f"({MAX_MEMBER_PATH} under members/, so a move to former/ always fits)")
     for part in parts:
         if (not SEGMENT.fullmatch(part) or part[-1] in " ."
-                or part.split(".")[0].lower() in RESERVED or part.lower() in INSTRUCTION_NAMES):
+                or part.split(".")[0].rstrip(" ").lower() in RESERVED
+                or part.lower() in INSTRUCTION_NAMES):
             raise Refused(f"`{path}`: names use letters, digits, space, dot, dash or underscore, "
                           "work on every system, and are never an AI instruction file name")
-    if ((parts[0] != "shared" and not PERSON.fullmatch(parts[1]))
+    if ((parts[0] in ("members", "requests") and not PERSON.fullmatch(parts[1]))
+            or (parts[0] == "former" and not FORMER.fullmatch(parts[1]))
             or (parts[0] == "requests"
                 and (len(parts) != 3 or not PERSON.fullmatch(parts[2][:-3])))
             or (parts[0] == "members" and parts[2] == "keys"
                 and (len(parts) != 4 or not PERSON.fullmatch(parts[3][:-3])))):
-        raise Refused(f"`{path}`: person and device names are lowercase letters, digits and dashes")
+        raise Refused(f"`{path}`: person and device names are lowercase letters, digits and "
+                      "dashes, at most 32 characters; a former member's folder is former/<name> "
+                      "or former/<name>-<2 to 99>")
 
 
-def file_rules(snap, path):
-    if snap.files[path][0] != "100644" or len(snap.raw(path)) > (
+def file_rules(snap, path):  # sizes first: an oversized file is refused before it is ever read
+    mode, oid = snap.files[path]
+    if mode != "100644" or int(_SIZES[oid]) > (
             MAX_REQUEST if REQUEST.fullmatch(path) or KEYFILE.fullmatch(path) else MAX_FILE):
         raise Refused(f"`{path}`: only plain files (no links, submodules or executables) of at "
                       "most 1 MB, or 64 KB for a request")
     name_rules(path)
     text = snap.raw(path).decode("utf-8", "replace")
     if "\ufffd" in text or BAD_TEXT.search(text):
-        raise Refused(f"`{path}`: only UTF-8 text, without control, bidi or zero-width characters")
+        raise Refused(f"`{path}`: only UTF-8 text, without control, bidi, invisible or "
+                      "private-use characters")
 
 
 def tree_rules(snap):
@@ -472,10 +510,21 @@ def tree_rules(snap):
             if first != name:
                 raise Refused(f"`{name}` and `{first}` differ only by case")
     if (".gitattributes" not in snap.files or snap.raw(".gitattributes") != ATTRS
-            or not re.fullmatch(r"[0-9a-f]{32}", str(snap.meta.get("hive", "")))):
+            or not re.fullmatch(r"[0-9a-f]{32}", str(snap.meta.get("hive", "")))
+            or not re.fullmatch(r"[1-9][0-9]{0,8}", str(snap.meta.get("version", "")))):
         raise Refused(".gitattributes must be exactly `* text eol=lf`, and HIVE.md needs its "
-                      "`hive:` id")
+                      "`hive:` id and a whole-number `version:`")
     approvals_of(snap.meta)
+    keys = [key for keys in snap.members.values() for key in keys.values()]
+    if len(keys) != len(set(keys)):
+        raise Refused("every key belongs to exactly one key file under members/")
+
+
+def commit_rules(c):  # only tree, parent, author, committer, gpgsig and `encoding UTF-8`, each once
+    if (len(c["headers"]) != len(set(c["headers"])) or set(c["headers"]) - HEADERS
+            or c.get("encoding", "UTF-8") != "UTF-8"):
+        raise Refused("a commit has only tree, parent, author, committer, gpgsig and `encoding "
+                      "UTF-8` headers, each once")
 
 
 def signer(c, default=None):
@@ -497,20 +546,25 @@ def check_root(repo, root):
             or set(s.files) - {"HIVE.md", ".gitattributes", *keys, f"members/{founder}/MEMBER.md"}):
         raise Refused("the root has no parent and holds only HIVE.md, .gitattributes and its "
                       "founder's key file (plus MEMBER.md)")
+    commit_rules(c)
     for path in s.files:
         file_rules(s, path)
     tree_rules(s)
+    if s.meta["version"] != "1":
+        raise Refused("the root's HIVE.md has `version: 1`")
     if (verify_request(s.text(keys[0]), founder, device, s.meta) != signer(c)
             or not c["author"] == c["committer"] == founder):
         raise Refused("the root must be signed by its founder's key, in the founder's name")
     return s.meta["hive"]
 
 
-# The signer's name if `commit` obeys the rules in the tree at `parent`; raises Refused otherwise.
+# Who signed `commit` (a member's name, or a request), if it obeys the rules in the tree at
+# `parent`; raises Refused otherwise.
 def judge(repo, parent, commit):
     c = read_commit(repo, commit)
     if c["parents"] != [parent]:
         raise Refused("history must stay one line: every commit has exactly one parent")
+    commit_rules(c)
     P, C, key = Snap(repo, parent), Snap(repo, commit), signer(c)
     changed = sorted(p for p in set(P.files) | set(C.files) if P.files.get(p) != C.files.get(p))
     for path in (p for p in changed if p in C.files):
@@ -518,6 +572,10 @@ def judge(repo, parent, commit):
     tree_rules(C)
     if C.meta.get("hive") != P.meta.get("hive"):
         raise Refused("the Hive's `hive:` id never changes")
+    spent = {sha(P.text(p)) for p in P.files if ANYKEY.fullmatch(p)}  # every request admitted
+    if any(REQUEST.fullmatch(p) and p not in P.files and sha(C.text(p)) in spent for p in changed):
+        raise Refused("a request that was admitted once is never filed again; to come back, file a "
+                      "new request")
     who = P.owner(key)
     if who is None:  # not a member: one new request, carrying the key that signed it
         match = (REQUEST.fullmatch(changed[0])
@@ -528,9 +586,9 @@ def judge(repo, parent, commit):
         if (verify_request(C.text(changed[0]), *match.groups(), C.meta) != key
                 or not c["author"] == c["committer"] == match[1]):
             raise Refused("a request is committed by the key it carries, in the name it asks for")
-        return match[1]
+        return f"a request from key {fingerprint(key)} (asking as {match[1]})"
     if not c["author"] == c["committer"] == who:
-        raise Refused(f"signed with {who}'s key but written in the name {c['author']!r}")
+        raise Refused(f"signed with {who}'s key but written in the name \"{shown(c['author'])}\"")
     authority(P, C, who, changed)
     if not C.members:
         raise Refused("at least one member must remain")
@@ -546,19 +604,22 @@ def authority(P, C, me, changed):
     # 1. Leaving, or removal: every file of members/<name>/ moves unchanged to former/<spot>/.
     for name in P.members:
         mine = {p for p in P.files if p.startswith(f"members/{name}/")}
-        spot = former_spot(P.files, name)
         if not mine <= gone:
             continue
+        spot = former_spot(P.files, name)
+        if spot is None:
+            raise Refused(f"former/ has no free folder for {name}: former/{name}-99/ is the last")
         moved = {f"former/{spot}/" + p[len(f"members/{name}/"):]: P.files[p] for p in mine}
         if ({p: C.files.get(p) for p in moved} != moved
                 or {p for p in added if p.startswith(f"former/{spot}/")} != set(moved)):
             raise Refused(f"leaving or removal moves every file of members/{name}/ unchanged to "
                           f"former/{spot}/")
-        others = set(P.members) - {name}
-        votes = {me} | P.approvers("remove", P.keys_hash(name), skip=name, member=name)
-        if name != me and (votes != others or len(others) < 2):
-            raise Refused(f"removing {name} needs every other member "
-                          f"({', '.join(sorted(others))}), and at least 2")
+        if name != me:
+            others = set(P.members) - {name}
+            votes = {me} | P.approvers("remove", P.admitted(name), skip=name, member=name)
+            if votes != others or len(others) < 2:
+                raise Refused(f"removing {name} needs every other member "
+                              f"({', '.join(sorted(others))}), and at least 2")
         done |= mine | set(moved)
     # 2. A key file arrives only as the exact move of a request.
     for m in filter(None, map(KEYFILE.fullmatch, sorted(added - done))):
@@ -578,6 +639,8 @@ def authority(P, C, me, changed):
     for path in sorted(set(changed) - done):
         top = path.split("/")
         if path == "HIVE.md" and path in C.files:
+            if int(C.meta["version"]) != int(P.meta["version"]) + 1:
+                raise Refused(f"a changed HIVE.md sets `version: {int(P.meta['version']) + 1}`")
             need = max(1, min(max(approvals_of(P.meta), approvals_of(C.meta)), len(P.members)))
             if len({me} | P.approvers("rules", sha(C.text(path)),
                                       replaces=sha(P.text(path)))) < need:
@@ -593,47 +656,89 @@ def authority(P, C, me, changed):
             raise Refused(f"{me} may not change `{path}`")
 
 
-def former_spot(files, name):  # former/<name>/, or former/<name>-2/, -3/ ... when that is taken
-    return next(s for s in [name] + [f"{name}-{n}" for n in range(2, 10 ** 4)]
-                if not any(p.startswith(f"former/{s}/") for p in files))
+def former_spot(files, name):  # former/<name>/, or former/<name>-2/ ... -99/ when that is taken
+    return next((s for s in [name] + [f"{name}-{n}" for n in range(2, 100)]
+                 if not any(p.startswith(f"former/{s}/") for p in files)), None)
 
 
 # Judge every commit from the pinned root (or a trusted later commit) to `head`; returns the hive
-# id, or raises Refused naming the first refused commit.
+# id, or raises Refused naming the first refused commit and the last one that passed.
 def verify(repo, root, head, since=None, say=None):
-    hive_id, start = check_root(repo, root), since or root
+    try:
+        hive_id = check_root(repo, root)
+    except Exception as error:  # noqa: BLE001 - whatever goes wrong judging a commit refuses it
+        raise refusal(root, error, None) from None
+    start, last = since or root, since
     if not is_ancestor(repo, start, head):
         raise Refused(f"{start[:10]} is no longer part of this history (it was rewritten)")
     for commit in ([] if since else [root]) + git(repo, "rev-list", "--reverse", "--topo-order",
                                                   f"{start}..{head}").decode().split():
-        c = read_commit(repo, commit)
-        parent = c["parents"][0] if len(c["parents"]) == 1 else ""
         try:
+            c = read_commit(repo, commit)
+            parent = c["parents"][0] if len(c["parents"]) == 1 else ""
             who = c["author"] if commit == root else judge(repo, parent, commit)
-        except Refused as error:
-            refusal, refusal.commit = Refused(f"{commit[:10]}: {error}"), commit
-            raise refusal from None
+        except Exception as error:  # noqa: BLE001
+            raise refusal(commit, error, last) from None
+        last = commit
         if say:
-            say(f"ok {commit[:10]} {who}: {c['subject']}")
+            say(f"ok {commit[:10]} {shown(who)}: {shown(c['subject'])}")
     return hive_id
 
 
-def check_public(folder):
-    path, found = os.path.join(folder, "PUBLISHED.md"), {}
-    text = norm(read(path)) if os.path.isfile(path) else ""
-    listing = dict(reversed(line.split("  ", 1)) for line in front(text)[1].split("\n")
+def signed_by(repo, commit):  # who signed a commit, in plain words: a member, or a request
+    c = read_commit(repo, commit)
+    key = signer(c, b"")
+    who = Snap(repo, c["parents"][0] if c["parents"] else commit).owner(key)
+    return who or f"a request from key {fingerprint(key)} (asking as {shown(c['author'])})"
+
+
+def refusal(commit, error, last):  # names the refused commit and the last one that passed
+    why = error if isinstance(error, Refused) else f"it cannot be judged ({type(error).__name__})"
+    made = Refused(shown(f"{commit[:10]}: {why}"))
+    made.commit, made.last = commit, last
+    return made
+
+
+# Problems with the committed tree of a public copy: plain files only, each listed in PUBLISHED.md
+# with its hash, nothing unlisted. With `hive`, also: every public commit is signed by a key of a
+# member (current or former) of that Hive, and PUBLISHED.md names a manifest the Hive approved.
+def check_public(folder, hive=None):
+    try:
+        snap = Snap(folder, rev(folder, "HEAD"))
+    except Refused:
+        snap = Snap(folder, None)
+    plain = {p for p, (mode, oid) in snap.files.items()
+             if mode == "100644" and int(_SIZES[oid]) <= MAX_FILE}
+    if "PUBLISHED.md" not in plain:
+        return ["there is no committed PUBLISHED.md"]
+    meta, body = front(snap.raw("PUBLISHED.md").decode("utf-8", "replace"))
+    listing = dict(reversed(line.split("  ", 1)) for line in body.split("\n")
                    if re.fullmatch(r"[0-9a-f]{64}  \S.*", line))
-    for base, dirs, names in os.walk(folder):
-        dirs[:] = [d for d in dirs if not (d == ".git" and base == folder)]
-        files = (os.path.join(base, n) for n in names)
-        found.update({os.path.relpath(f, folder).replace(os.sep, "/"):
-                      None if is_link(f) else read(f) for f in files})
-    problems = [f"`{p}` is not listed in PUBLISHED.md" if p not in listing
-                else f"`{p}` does not match its listed hash" for p, d in sorted(found.items())
-                if p not in ("PUBLISHED.md", ".gitattributes")
-                and (p not in listing or d is None or sha(norm(d)) != listing[p])]
-    return ((problems + [f"`{p}` is listed but missing" for p in listing if p not in found])
-            if text else ["there is no PUBLISHED.md"])
+    problems = [f"`{p}` is not a plain file of at most 1 MB" for p in sorted(snap.files)
+                if p not in plain]
+    if ".gitattributes" in plain and snap.raw(".gitattributes") != ATTRS:
+        problems.append("`.gitattributes` is not exactly `* text eol=lf`")
+    for p in sorted(plain - {"PUBLISHED.md", ".gitattributes"}):
+        try:
+            same = p in listing and sha(snap.text(p)) == listing[p]
+        except UnicodeDecodeError:
+            same = False
+        if not same:
+            problems.append(f"`{p}` is not listed in PUBLISHED.md" if p not in listing
+                            else f"`{p}` does not match its listed hash")
+    problems += [f"`{p}` is listed but missing" for p in listing if p not in plain]
+    if hive:
+        S = Snap(hive, rev(hive, "HEAD"))
+        keys = {request_key(S.text(p)) for p in S.files if ANYKEY.fullmatch(p)}
+        problems += [f"commit {c[:10]} is not signed by a key of this Hive's members"
+                     for c in git(folder, "rev-list", snap.commit).decode().split()
+                     if signer(read_commit(folder, c), b"") not in keys]
+        who = S.owner(signer(read_commit(folder, snap.commit), b""))
+        votes = S.approvers("publish", meta.get("manifest")) | ({who} if who else set())
+        if len(votes) < S.threshold() or not any(
+                MANIFEST.fullmatch(p) and sha(S.text(p)) == meta.get("manifest") for p in S.files):
+            problems.append("PUBLISHED.md does not name a manifest that this Hive approved")
+    return problems
 
 
 # ---- this device -------------------------------------------------------------------------------
@@ -685,12 +790,54 @@ def _real(path):  # with a trailing separator, so a/b is not taken to be inside 
     return os.path.join(os.path.normcase(os.path.realpath(path)), "")
 
 
+def in_synced(path):  # inside a folder that iCloud, OneDrive, Dropbox, Google Drive or Box syncs
+    return any(SYNCED.fullmatch(part) for part in re.split(r"[\\/]", os.path.realpath(path)))
+
+
+# The folder a shared-copy address names (relative ones from `base`, the Hive folder), or None for
+# a network address (ssh://, https://, git:// or host:path). A folder must be a bare repository
+# without alternates, outside synced folders; a folder that is not there is simply offline.
+def shared_folder(addr, base):
+    a = str(addr)
+    folder = os.path.join(base, a[7:] if a.startswith("file://") else a)
+    if not (a.startswith(("file://", "./", "../", ".\\", "..\\")) or os.path.isabs(a)
+            or re.match(r"[A-Za-z]:[\\/]", a)):
+        if re.match(r"(ssh|https?|git)://|[^/\\:]+:", a):
+            return None
+        raise Refused("give the shared copy as a git URL (ssh://, https://, git:// or host:path) "
+                      "or a folder path that starts with /, ./, ../ or a drive letter")
+    if os.path.exists(folder) and (
+            in_synced(folder) or os.path.exists(os.path.join(folder, ".git"))
+            or os.path.exists(os.path.join(folder, "objects", "info", "alternates"))
+            or git(folder, "config", "--bool", "core.bare", ok=(0, 1)) != b"true\n"):
+        raise Refused(f"`{a}` must be a bare git repository without `objects/info/alternates`, "
+                      "outside synced folders, to be a folder shared copy")
+    return folder
+
+
+# How the Hive at `repo` reaches the shared copy at `addr` (`side`: upload-pack or receive-pack).
+# For a folder, git runs that copy's side itself: with no hooks and none of its own commands.
+def pack_args(repo, addr, side):
+    if not shared_folder(addr, repo):
+        return []
+    hooks = shlex.quote(os.path.join(repo, ".git", "rapp-hive", "hooks"))
+    return [f"--{side}=git -c core.hooksPath={hooks} " + " ".join(f"-c {f}" for f in PACK_FLAGS)
+            + f" {side}"]
+
+
+def remove_tree(path):  # read-only files too: git leaves its objects read-only on Windows
+    def force(func, target, _):
+        os.chmod(target, 0o700)
+        func(target)
+    shutil.rmtree(path, **{"onexc" if sys.version_info >= (3, 12) else "onerror": force})
+
+
 # RAPP_HIVES (default: Hives in the home folder), refused inside synced folders and anywhere near
 # the Brainstem's own files.
 def hives_home():
     home = os.path.abspath(os.path.expanduser(os.environ.get("RAPP_HIVES")
                                               or os.path.join("~", "Hives")))
-    if any(SYNCED.fullmatch(part) for part in re.split(r"[\\/]", os.path.realpath(home))):
+    if in_synced(home):
         raise Refused(f"`{home}` is inside a synced folder (iCloud, OneDrive, Dropbox, Google "
                       "Drive or Box), which corrupts git and copies keys; set RAPP_HIVES")
     main, places = sys.modules.get("__main__"), [os.path.dirname(os.path.abspath(__file__))]
@@ -894,7 +1041,7 @@ class HiveAgent(BasicAgent):
             self.home = hives_home()
             getattr(self, "_" + action)(say, kw)
         except Refused as error:
-            say(f"Not done: {say.q(error)}")
+            say(f"Not done: {say.q(shown(error))}")
         return say.text()
 
     def hive(self, kw):
@@ -929,13 +1076,14 @@ class HiveAgent(BasicAgent):
 
     def _apply(self, say, kw):
         path = self._plan_file(kw)
-        plan, data = json.loads(read(path)), read(path)
-        if plan["token"] == self._turn:
+        data = read(path)  # read once: what is parsed is exactly what was hashed
+        plan = (json.loads(data) if hashlib.sha256(data).hexdigest() == os.path.basename(path)[:-5]
+                else None)
+        if plan and plan["token"] == self._turn:
             raise Refused("it was proposed in this same turn; apply it only after the person "
                           "confirms in a later message")
         os.remove(path)
-        altered = hashlib.sha256(data).hexdigest() != os.path.basename(path)[:-5]
-        if altered or now() - plan["made"] > HOUR:
+        if not plan or now() - plan["made"] > HOUR:
             raise Refused("that proposal is more than an hour old or was altered; propose it again")
         getattr(self, "_do_" + plan["kind"])(
             say, Hive(self.home, plan["hive"]) if plan["hive"] else None, plan)
@@ -1026,11 +1174,11 @@ class HiveAgent(BasicAgent):
             checked = f"every change up to {head[:10]} is signed and allowed."
         except Refused as error:
             checked = ("PROBLEM (the first refused commit; everything after it is untrusted): "
-                       + say.q(error))
+                       + say.q(shown(error)))
         waiting = [p for p in sorted(s.files) if REQUEST.fullmatch(p)]
         edits = h.edits()
         plans = os.listdir(h.st("plans")) if os.path.isdir(h.st("plans")) else []
-        problems = check_public(os.path.join(self.home, public["name"])) if public else None
+        problems = check_public(os.path.join(self.home, public["name"]), h.path) if public else None
         member = "a member" if s.owner(pub_blob(h.key())) else "not a member yet"
         adopted = [f"Adopted routine {say.q(n)}: its source "
                    + ("is unchanged." if i["path"] in s.files and sha(s.text(i["path"])) == i["sha"]
@@ -1086,7 +1234,7 @@ class HiveAgent(BasicAgent):
         if path not in s.files:
             raise Refused(f"`{path}` is not in the Hive")
         last = git(h.path, "rev-list", "-1", "HEAD", "--", path).decode().strip()
-        author = read_commit(h.path, last)["author"]
+        author = signed_by(h.path, last)
         say(f"{say.p(path)}, last changed by {say.q(author)} in signed commit {last[:10]} (sha256 "
             f"{sha(s.text(path))[:12]}):", say.q("\n" + s.text(path).rstrip() + "\n"))
 
@@ -1120,12 +1268,19 @@ class HiveAgent(BasicAgent):
         if (addr and (addr.startswith("-") or "::" in addr or BAD_TEXT.search(addr))
                 or plan["kind"] == "join" and not addr):
             raise Refused("give the shared copy as a git URL or a folder path")
+        if addr:
+            shared_folder(addr, os.path.join(self.home, folder))  # a folder: a bare repository
         if (not folder or folder == "adopted" or os.path.exists(os.path.join(self.home, folder))
                 or not PERSON.fullmatch(me) or not PERSON.fullmatch(device)):
             raise Refused(f"name a new Hive folder (`{folder}` is taken or empty), and give your "
-                          "short name and device in lowercase letters, digits and dashes")
+                          "short name and device in lowercase letters, digits and dashes (at most "
+                          "32)")
         if kw.get("key") and not os.path.isfile(safe(self.home, kw["key"])):
             raise Refused(f"`{kw['key']}` is not a file in the Hives folder")
+        if kw.get("key") and os.path.isdir(os.path.join(self.home, rel(kw["key"]).split("/")[0],
+                                                        ".git")):
+            raise Refused(f"`{kw['key']}` is inside a Hive folder, where it could be shared; keep "
+                          "keys outside every Hive")
         self.propose(say, None, {**plan, "folder": folder, "name": me, "device": device,
                                  "key": kw.get("key"), "address": addr}, [
             f"{plan['kind'].title()} the Hive in `{os.path.join(self.home, folder)}` as {me} on "
@@ -1134,22 +1289,25 @@ class HiveAgent(BasicAgent):
                else "a new one") + ", stored only in the Hive's private `.git/rapp-hive/`."])
 
     def _do_create(self, say, _, plan):
-        me, device, key, folder = self._new(plan)
-        # With a fixed clock the id is reproducible, for examples.
-        seed = b"" if os.environ.get("RAPP_HIVE_NOW") else secrets.token_bytes(16)
-        hive_id = hashlib.sha256(pub_blob(key) + utc().encode() + plan["title"].encode()
-                                 + seed).hexdigest()[:32]
-        meta = {k: v for k, v in {"hive": hive_id, "approvals": plan["approvals"],
-                                  "fields": plan["fields"], "previous": plan["previous"]}.items()
-                if v}
-        writes = {"HIVE.md": hive_md(meta, BODY.format(title=plan["title"])).encode(),
-                  ".gitattributes": ATTRS,
-                  f"members/{me}/keys/{device}.md": request_text(key, hive_id, me,
-                                                                  device).encode()}
-        root = make_commit(folder, build_tree(folder, None, writes), None, me,
-                           f"Create the Hive {plan['title']}", key)
-        check_root(folder, root)
-        self._pin(folder, root, plan, key, hive_id, fingerprint(pub_blob(key)))
+        folder = self._claim(plan)
+        try:  # if anything fails, nothing is left behind
+            me, device, key = self._new(plan)
+            hive_id = hashlib.sha256(pub_blob(key) + utc().encode() + plan["title"].encode()
+                                     + hive_seed()).hexdigest()[:32]
+            meta = {k: v for k, v in {"hive": hive_id, "version": 1, "approvals": plan["approvals"],
+                                      "fields": plan["fields"],
+                                      "previous": plan["previous"]}.items() if v}
+            writes = {"HIVE.md": hive_md(meta, BODY.format(title=plan["title"])).encode(),
+                      ".gitattributes": ATTRS,
+                      f"members/{me}/keys/{device}.md": request_text(key, hive_id, me,
+                                                                      device).encode()}
+            root = make_commit(folder, build_tree(folder, None, writes), None, me,
+                               f"Create the Hive {plan['title']}", key)
+            check_root(folder, root)
+            self._pin(folder, root, plan, key, hive_id, fingerprint(pub_blob(key)))
+        except BaseException:
+            remove_tree(folder)
+            raise
         say(f"Created the Hive in `{folder}`. Its root commit is {root}; your key is "
             f"{fingerprint(pub_blob(key))}. To invite someone, give them the shared copy's address "
             "and that root commit id: they say join, and members admit them.")
@@ -1163,37 +1321,54 @@ class HiveAgent(BasicAgent):
             "remote": plan["address"], "founder": founder})
         Hive(self.home, plan["folder"]).advance(None, head)
 
+    def _claim(self, plan):  # the new Hive's folder, made now: nothing may be there yet
+        folder = os.path.join(self.home, plan["folder"])
+        if os.path.lexists(folder):
+            raise Refused(f"`{folder}` exists already; propose it again under another name")
+        os.makedirs(folder)
+        return folder
+
     def _new(self, plan):
         key = (load_key_file(safe(self.home, plan["key"])) if plan["key"]
                else Ed25519PrivateKey.generate())
-        return plan["name"], plan["device"], key, new_hive_folder(self.home, plan["folder"], key)
+        new_hive_folder(self.home, plan["folder"], key)
+        return plan["name"], plan["device"], key
 
     def _do_join(self, say, _, plan):
-        (me, device, key, folder), root = self._new(plan), plan["root"]
-        try:
-            git(folder, "fetch", "-q", "--no-tags", "--", plan["address"],
+        folder, root = self._claim(plan), plan["root"]
+        try:  # if anything fails, nothing is left behind
+            me, device, key = self._new(plan)
+            git(folder, "fetch", "-q", "--no-tags",
+                *pack_args(folder, plan["address"], "upload-pack"), "--", plan["address"],
                 "+refs/heads/main:refs/remotes/origin/main")
             head = rev(folder, "refs/remotes/origin/main")
+            if not head or git(folder, "cat-file", "-e", root + "^{commit}",
+                               ok=(0, 1, 128)) is None:
+                raise Refused(f"the shared copy does not hold the root commit {root[:12]} from the "
+                              "invitation")
             hive_id = verify(folder, root, head)
-        except Refused:
-            shutil.rmtree(folder, ignore_errors=True)
+            founder = fingerprint(request_key(Snap(folder, root).text(
+                next(p for p in tree(folder, root) if KEYFILE.fullmatch(p)))))
+            self._pin(folder, head, plan, key, hive_id, founder)
+            h, path = Hive(self.home, plan["folder"]), f"requests/{me}/{device}.md"
+            member = h.snap().owner(pub_blob(key)) == me
+            if not member:
+                mine = ([r for r in old_requests(safe(self.home, plan["carry"]))
+                         if ssh_blob(spki_key(r[3])[1]) == pub_blob(key)] if plan["carry"]
+                        else [None])
+                if not mine:
+                    raise Refused("that old Hive holds no signed join request made with this key")
+                text = (carried_text(*mine[0][2:], me, device, plan["note"]) if mine[0]
+                        else request_text(key, hive_id, me, device, plan["note"]))
+                new = h.commit(f"Ask to join ({me}, {device})", {path: text.encode()})
+                h.advance(head, new)
+        except BaseException:
+            remove_tree(folder)
             raise
-        founder = fingerprint(request_key(Snap(folder, root).text(
-            next(p for p in tree(folder, root) if KEYFILE.fullmatch(p)))))
-        self._pin(folder, head, plan, key, hive_id, founder)
-        h, path = Hive(self.home, plan["folder"]), f"requests/{me}/{device}.md"
         say(f"Copied the Hive into `{folder}` and checked every commit from the root {root[:10]}. "
             f"Its founder's key is {founder}; compare it with the invitation.")
-        if h.snap().owner(pub_blob(key)) == me:
+        if member:
             return say("This key is already a member's: you are in.")
-        mine = ([r for r in old_requests(safe(self.home, plan["carry"]))
-                 if ssh_blob(spki_key(r[3])[1]) == pub_blob(key)] if plan["carry"] else [None])
-        if not mine:
-            raise Refused("that old Hive holds no signed join request made with this key")
-        text = (carried_text(*mine[0][2:], me, device, plan["note"]) if mine[0]
-                else request_text(key, hive_id, me, device, plan["note"]))
-        new = h.commit(f"Ask to join ({me}, {device})", {path: text.encode()})
-        h.advance(head, new)
         say(f"Filed your request `{path}`, signed by your key {fingerprint(pub_blob(key))}. Tell a "
             "member that fingerprint in person or by voice.")
         self._sync(say, {"hive": h.name})
@@ -1238,7 +1413,7 @@ class HiveAgent(BasicAgent):
         if not kind:
             raise Refused("I can approve a request, a publication manifest or a proposed HIVE.md "
                           "(by path), or removing a member (by name)")
-        subject = s.keys_hash(name) if kind == "remove" else sha(s.text(path))
+        subject = s.admitted(name) if kind == "remove" else sha(s.text(path))
         extra = ({"member": name} if kind == "remove"
                  else {"replaces": sha(s.text("HIVE.md"))} if kind == "rules" else {})
         dest = f"members/{me}/approvals/{kind}-{subject[:12]}.md"
@@ -1264,7 +1439,7 @@ class HiveAgent(BasicAgent):
                 [f"Retire your device {say.q(kw['device'])}: delete its key file, so that key can "
                  "no longer sign for you."])
         others, spot = set(s.members) - {name}, former_spot(s.files, str(name))
-        votes = ({me} | s.approvers("remove", s.keys_hash(name), skip=name, member=name)
+        votes = ({me} | s.approvers("remove", s.admitted(name), skip=name, member=name)
                  if name in s.members else set())
         if (name not in s.members or not others
                 or name != me and (votes != others or len(votes) < 2)):
@@ -1284,6 +1459,7 @@ class HiveAgent(BasicAgent):
         say(lead)
         meta, body = front(s.text(rel(kw["path"])) if kw.get("path") else s.text("HIVE.md"))
         meta.update({k: str(kw[k]) for k in ("approvals", "fields") if kw.get(k)})
+        meta["version"] = str(int(s.meta["version"]) + 1)  # texts never repeat, nor do approvals
         if kw.get("previous"):
             meta["previous"] = list(dict.fromkeys(listed(meta, "previous")
                                                   + list(map(str, kw["previous"]))))
@@ -1378,7 +1554,7 @@ class HiveAgent(BasicAgent):
         head = h.head()
         target = (rev(h.path, kw["commit"]) if kw.get("commit") else  # else: your newest change
                   next((c for c in git(h.path, "rev-list", head).decode().split()
-                        if read_commit(h.path, c)["author"] == me), 0))
+                        if signed_by(h.path, c) == me), 0))  # by signing key, not by name
         c = (read_commit(h.path, target) if target and is_ancestor(h.path, target, head)
              else {"parents": []})
         if len(c["parents"]) != 1:
@@ -1395,10 +1571,11 @@ class HiveAgent(BasicAgent):
         if problem:
             raise Refused(problem + ". Membership changes are undone through the rules: undoing "
                           "an admission is a removal.")
-        self.propose(say, h, {"kind": "commit", "subject": f"Undo {target[:10]}: {c['subject']}",
+        self.propose(say, h, {"kind": "commit",
+                              "subject": f"Undo {target[:10]}: {shown(c['subject'])}",
                               "ops": ops},
-                     [f"Undo {target[:10]} ({say.q(c['subject'])}): put these {len(paths)} files "
-                      "back as they were (undoing this undo redoes it):"]
+                     [f"Undo {target[:10]} ({say.q(shown(c['subject']))}): put these "
+                      f"{len(paths)} files back as they were (undoing this undo redoes it):"]
                      + [f"- {say.p(p)}" + ("" if p in before else " (removed)") for p in paths])
 
     # -- the public copy, adoption and old Hives --
@@ -1426,7 +1603,7 @@ class HiveAgent(BasicAgent):
         files = [line.split("  ", 1) for line in body.split("\n")
                  if re.fullmatch(r"[0-9a-f]{64}  shared/[^/]+/.+\.md", line)]
         rooms = {"/".join(p.split("/")[:2]) + "/" for _, p in files}
-        votes = {h.dev["name"]} | s.approvers("publish", sha(s.text(path)))
+        votes = ({h.dev["name"]} & set(s.members)) | s.approvers("publish", sha(s.text(path)))
         if (not public or meta.get("to") != public["name"] or len(rooms) != 1
                 or any(p not in s.files or sha(s.text(p)) != d for d, p in files)
                 or len(votes) < s.threshold()):
@@ -1474,7 +1651,8 @@ class HiveAgent(BasicAgent):
         Hive(self.home, os.path.basename(folder)).advance(parent, new)
         say(f"Published {len(files)} file(s) into `{folder}` (commit {new[:10]}, signed by "
             f"{h.dev['name']}). check-public: "
-            + say.q("; ".join(check_public(folder)) or "every file is listed with its hash."))
+            + say.q("; ".join(check_public(folder, h.path))
+                    or "every file is listed with its hash."))
 
     def _adopt(self, say, kw):
         (h, s, me), path = self.hive(kw), rel(kw.get("path"))
@@ -1486,7 +1664,7 @@ class HiveAgent(BasicAgent):
         self.propose(say, h, {"kind": "adopt", "path": path, "sha": sha(text), "commit": last,
                               "name": name}, [
             f"Adopt {say.p(path)} as your own routine {say.q(name)}. Last changed by "
-            f"{say.q(read_commit(h.path, last)['author'])} in signed commit {last[:10]}; sha256 "
+            f"{say.q(signed_by(h.path, last))} in signed commit {last[:10]}; sha256 "
             f"{sha(text)}. Its exact text:", say.q("\n" + text.rstrip() + "\n"),
             f"It hides {len(comments)} HTML comment(s), invisible when rendered: "
             f"{say.q(' | '.join(comments))}" if comments else None,
@@ -1531,20 +1709,24 @@ class HiveAgent(BasicAgent):
 
     # -- sharing: verify before checkout, re-apply unshared work, report a bad shared copy and
     # propose repairing it --
-    def _sync(self, say, kw, keep=False):
+    def _sync(self, say, kw, keep=None):
         h, s, me = self.hive(kw)
         addr, local = h.dev.get("remote"), h.head()
         accepted = rev(h.path, "refs/remotes/origin/main")
-        listing = git(h.path, "ls-remote", "--", addr, "refs/heads/main",
+        pack = pack_args(h.path, addr, "upload-pack") if addr else []
+        listing = git(h.path, "ls-remote", *pack, "--", addr, "refs/heads/main",
                       ok=(0, 1, 2, 128)) if addr else None
         if listing is None:
             return say("Offline: I could not reach the shared copy. Everything is safe here; say "
                        "sync later." if addr else "There is no shared copy; all stays here.")
         incoming = listing.strip()  # b"" while the shared copy is still empty
         if incoming:
-            git(h.path, "fetch", "-q", "--no-tags", "--", addr,
+            git(h.path, "fetch", "-q", "--no-tags", *pack, "--", addr,
                 "+refs/heads/main:refs/rapp-hive/incoming")
             incoming = rev(h.path, "refs/rapp-hive/incoming")
+        if keep and keep != [local, incoming]:  # a plan applies only to what the person was shown
+            raise Refused("this device or the shared copy changed since the proposal; say sync "
+                          "again")
         try:  # everything new in the shared copy is judged before any of it is used
             if accepted and incoming and not is_ancestor(h.path, accepted, incoming):
                 return self.propose(say, h, {"kind": "push", "commit": local, "lease": incoming}, [
@@ -1553,15 +1735,16 @@ class HiveAgent(BasicAgent):
                     f"verified history ({local[:10]}) with force-with-lease."])
             if incoming and incoming != accepted:
                 verify(h.path, h.dev["root"], incoming, since=accepted)
-        except Refused as error:
-            c = read_commit(h.path, getattr(error, "commit", incoming))
-            return self.propose(say, h, {"kind": "push", "commit": c["parents"][0],
-                                         "lease": incoming}, [
+        except Refused as error:  # reset to the last commit that passed, never to an unjudged one
+            last = getattr(error, "last", None) or accepted or local
+            c = read_commit(h.path, error.commit) if hasattr(error, "commit") else None
+            return self.propose(say, h, {"kind": "push", "commit": last, "lease": incoming}, [
                 f"The shared copy has a change I refuse, so I took nothing from it: "
-                f"{say.q(error)} (written in the name {say.q(c['author'])}; signing key: "
-                f"{fingerprint(signer(c, b'')) if signer(c, b'') else 'none'}). Reset the shared "
-                f"copy to {c['parents'][0][:10]}, the last verified commit, with force-with-lease: "
-                "no device accepted anything after it."])
+                f"{say.q(shown(error))}"
+                + (f" (written in the name {say.q(shown(c['author']))}; signing key: "
+                   f"{fingerprint(signer(c, b'')) if signer(c, b'') else 'none'})" if c else "")
+                + f". Reset the shared copy to {last[:10]}, the last verified commit, with "
+                "force-with-lease: no device accepted anything after it."])
         if incoming:
             git(h.path, "update-ref", "refs/remotes/origin/main", incoming)
         if not incoming or is_ancestor(h.path, incoming, local):
@@ -1590,7 +1773,7 @@ class HiveAgent(BasicAgent):
             for p in sorted(x for x in set(P) | set(C) if P.get(x) != C.get(x)):
                 if p in theirs and p not in moved:
                     conflicts.append(p)
-                target = (f"members/{h.dev['name']}/kept/{commit[:8]}/{os.path.basename(p)}"
+                target = (f"members/{h.dev['name']}/kept/{commit[:8]}/{p}"
                           if p in conflicts else moved.get(p, p))
                 if p in C and (p not in conflicts or keep):
                     writes[target] = blobs(h.path, [C[p][1]])[0]
@@ -1602,7 +1785,7 @@ class HiveAgent(BasicAgent):
             except Refused as error:
                 dropped.append(f"{c['subject']!r} ({error})")
         if (conflicts or dropped) and not keep:
-            return self.propose(say, h, {"kind": "sync", "keep": True}, [
+            return self.propose(say, h, {"kind": "sync", "incoming": incoming}, [
                 "While this device was offline, the same files changed here and in the shared "
                 "copy (nothing is lost):",
                 *[f"- {say.p(p)} changed on both sides" for p in conflicts],
@@ -1622,10 +1805,9 @@ class HiveAgent(BasicAgent):
         self._push(say, h, tip)
 
     def _push(self, say, h, commit, lease=None):
-        hooks = ([] if re.match(r"(ssh|https?|git)://|[^/\\]+@[^/\\]+:", h.dev["remote"])
-                 else ["--receive-pack", f"git -c core.hooksPath={os.devnull} receive-pack"])
         pushed = git(h.path, "push", "-q",
-                     *([f"--force-with-lease=refs/heads/main:{lease}"] if lease else []), *hooks,
+                     *([f"--force-with-lease=refs/heads/main:{lease}"] if lease else []),
+                     *pack_args(h.path, h.dev["remote"], "receive-pack"),
                      "--", h.dev["remote"], f"{commit}:refs/heads/main", ok=(0, 1, 128))
         if pushed is None:
             return say("Not shared yet (offline, or someone shared at the same moment); it is safe "
@@ -1634,39 +1816,54 @@ class HiveAgent(BasicAgent):
         say(f"Shared: the shared copy is at {commit[:10]}.")
 
     def _do_sync(self, say, h, plan):
-        self._sync(say, {"hive": h.name}, keep=plan["keep"])
+        self._sync(say, {"hive": h.name}, keep=[plan["base"], plan["incoming"]])
 
     # A reset is proposed by the same checks, when the shared copy holds a refused commit or
     # went backwards.
     _reset = _sync
 
     def _do_push(self, say, h, plan):
+        if h.head() != plan["base"]:  # a plan applies only to what the person was shown
+            raise Refused("this device changed since the proposal; say sync again")
         self._push(say, h, plan["commit"], plan["lease"])
 
 
 def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) in (2, 4) and args[0] == "check" and args[2:3] in ([], ["--since"]):
-        try:
-            roots = git(args[1], "rev-list", "--max-parents=0", "HEAD").decode().split()
-            root = (load(os.path.join(args[1], ".git", "rapp-hive", "device.json"), {}).get("root")
-                    or roots[0])
-            since = rev(args[1], args[3]) if args[3:] else None
-            verify(args[1], root, rev(args[1], "HEAD"), since=None if since == root else since,
-                   say=print)
-            print(f"verified: every commit up to {rev(args[1], 'HEAD')[:10]} is signed and allowed")
-            return 0
-        except (Refused, IndexError) as error:
-            print(f"REFUSED {error or 'not a Hive folder'}\neverything after that point is "
-                  "untrusted")
-            return 1
-    if len(args) == 2 and args[0] == "check-public":
-        problems = check_public(args[1])
-        print("\n".join(f"REFUSED {p}" for p in problems)
-              or "ok: every file is listed in PUBLISHED.md with its hash")
-        return 1 if problems else 0
+    opts = dict(zip(args[2::2], args[3::2]))
+    try:
+        if args[:1] == ["check"] and len(args) % 2 == 0 and set(opts) <= {"--since", "--root"}:
+            return check_command(args[1], opts)
+        if args[:1] == ["check-public"] and len(args) % 2 == 0 and set(opts) <= {"--hive"}:
+            problems = check_public(args[1], opts.get("--hive"))
+            print("\n".join(f"REFUSED {shown(p)}" for p in problems)
+                  or "ok: every committed file is listed in PUBLISHED.md with its hash")
+            if "--hive" not in opts:
+                print("structure only; signer not checked (add --hive <hive-folder>)")
+            return 1 if problems else 0
+    except (Refused, IndexError, StopIteration) as error:
+        print(shown(f"REFUSED {str(error) or 'not a Hive folder'}\neverything after that point is "
+                    "untrusted"))
+        return 1
     print(__doc__)
     return 2
+
+
+def check_command(folder, opts):  # `check`: every commit from the pinned root, one line each
+    roots = git(folder, "rev-list", "--max-parents=0", "HEAD").decode().split()
+    pinned = load(os.path.join(folder, ".git", "rapp-hive", "device.json"), {}).get("root")
+    root = pinned or opts.get("--root") or roots[0]
+    if roots != [root] or pinned and opts.get("--root", pinned) != pinned:
+        raise Refused(f"the history starts at {', '.join(r[:10] for r in roots)}, not at the root "
+                      f"{(opts.get('--root') or root)[:10]}")
+    if not pinned:  # nothing pinned on this device: show what to compare with the invitation
+        first = Snap(folder, root)
+        key = request_key(first.text(next(p for p in first.files if KEYFILE.fullmatch(p))))
+        print(f"root {root}; founder's key {fingerprint(key)}: compare both with the invitation")
+    since = rev(folder, opts["--since"]) if "--since" in opts else None
+    verify(folder, root, rev(folder, "HEAD"), since=None if since == root else since, say=print)
+    print(f"verified: every commit up to {rev(folder, 'HEAD')[:10]} is signed and allowed")
+    return 0
 
 
 if __name__ == "__main__":

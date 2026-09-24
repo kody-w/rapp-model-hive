@@ -5,9 +5,9 @@ in one turn and an apply in the next, each turn with a fresh agent instance, on 
 temporary folder. A bare repository is the shared copy; every device has its own Hives folder.
 
 The keys are PUBLIC TEST KEYS, derived from published labels with the rule of the frozen rapp-hive/2 model.
-Anyone can re-derive them, so they prove nothing: never use them for real data. The clock is fixed with
-RAPP_HIVE_NOW (timestamps carry no authority). Ed25519 signatures are deterministic, so every build makes the
-same commit ids on every system.
+Anyone can re-derive them, so they prove nothing: never use them for real data. The clock is fixed by replacing
+the agent's `now` (and a new Hive's random id seed by replacing `hive_seed`); timestamps carry no authority.
+Ed25519 signatures are deterministic, so every build makes the same commit ids on every system.
 
     python tools/build_example.py           rebuild example/
     python tools/build_example.py --check   rebuild in a temporary folder and compare with example/
@@ -42,15 +42,15 @@ def rmtree(path):
 
 
 class Clock:
-    """A fixed story clock (RAPP_HIVE_NOW). It only makes the example reproducible; time carries no authority."""
+    """A fixed story clock, put in place of the agent's own. It only makes the example reproducible; time carries
+    no authority. A new Hive's id seed is fixed too, so its id is the same on every build."""
 
     def __init__(self):
         self.now = datetime(2026, 9, 24, 9, 0, tzinfo=timezone.utc)
-        self.tick(0)
+        ha.now, ha.hive_seed = (lambda: int(self.now.timestamp())), (lambda: b"")
 
     def tick(self, minutes=5):
         self.now += timedelta(minutes=minutes)
-        os.environ["RAPP_HIVE_NOW"] = self.now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 class Device:
@@ -333,10 +333,12 @@ def story(root):
     A2.say(action="sync")
     log["J11 publish"] = A2.do(action="publish", path="members/avery/publish/public-page.md")
     public = os.path.join(A2.home, "contoso-onboarding-public")
-    with open(os.path.join(public, "extra.md"), "w", encoding="utf-8", newline="\n") as f:
-        f.write("# Not reviewed\n")
-    log["J9d check"] = "\n".join(ha.check_public(public))
-    os.remove(os.path.join(public, "extra.md"))
+    published = ha.rev(public, "HEAD")  # someone who can write the folder slips in a commit of their own
+    slipped = ha.make_commit(public, ha.build_tree(public, published, {"extra.md": b"# Not reviewed\n"}), published,
+                             "frankie", "Add a page", frank.key())
+    ha.git(public, "update-ref", "refs/heads/main", slipped)
+    log["J9d check"] = "\n".join(ha.check_public(public, A2.hive))
+    ha.git(public, "update-ref", "refs/heads/main", published)
     label("J11")
 
     # J6: Blake leaves. His folder moves to former/blake/; the team keeps what he shared.
@@ -355,10 +357,10 @@ def history(result):
     root = ha.git(bare, "rev-list", "--max-parents=0", "main").decode().split()[0]
     ha.verify(bare, root, ha.rev(bare, "main"), say=lines.append)
     rows = []
-    for n, line in enumerate(lines, 1):
+    for n, line in enumerate(lines, 1):  # "ok <commit> <signer>: <subject>"; a signer that is no member is a request
         commit = next(c for c in result["labels"] if c.startswith(line.split()[1]))
-        c = ha.read_commit(bare, commit)
-        rows.append(f"| {n} | `{commit[:10]}` | {result['labels'][commit]} | {c['author']} | `{ha.fingerprint(ha.signer(c))[:19]}…` | {c['subject']} | yes |")
+        c, who = ha.read_commit(bare, commit), line.split(" ", 2)[2].partition(": ")[0]
+        rows.append(f"| {n} | `{commit[:10]}` | {result['labels'][commit]} | {who} | `{ha.fingerprint(ha.signer(c))[:19]}…` | {c['subject']} | yes |")
     refused = [f"| `{commit[:10]}` | {who} | `{key[:19]}…` | a key that is not a member's may only add one request under `requests/` |"
                for commit, who, key, _ in result["refused"]]
     pub = result["public"]
@@ -366,7 +368,8 @@ def history(result):
     return "\n".join([
         "# History of the model Hive", "",
         "Every commit of `contoso-onboarding/`, oldest first, as `python agents/hive_agent.py check` judges it: each one is signed by a",
-        "key listed in the tree at its parent, and changes only what that tree allows. Built by `tools/build_example.py`.", "",
+        "member's key listed in the tree at its parent and changes only what that tree allows, or is one request, signed by the key",
+        "it carries. Built by `tools/build_example.py`.", "",
         "The keys are public test keys: anyone can re-derive them from their labels, so they prove nothing. Never use them for",
         "real data. Times come from a fixed clock and carry no authority.", "",
         "| # | Commit | Journey | Signer | Key | What | Verified |", "|---|---|---|---|---|---|---|", *rows, "",
@@ -394,14 +397,14 @@ def export(result, out):
 
 def build(out):
     scratch = tempfile.mkdtemp(prefix="hive-")
-    saved = {k: os.environ.get(k) for k in ("RAPP_HIVES", "RAPP_HIVE_NOW")}
+    saved, clock = os.environ.get("RAPP_HIVES"), (ha.now, ha.hive_seed)
     try:
         result = story(scratch)
         export(result, out)
         return result
     finally:
-        for k, v in saved.items():
-            os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        os.environ.pop("RAPP_HIVES", None) if saved is None else os.environ.__setitem__("RAPP_HIVES", saved)
+        ha.now, ha.hive_seed = clock
         rmtree(scratch)
 
 

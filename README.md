@@ -50,7 +50,7 @@ the review, and checks the commits with stock `git verify-commit` and `ssh-keyge
 
 ## How it fits the Brainstem
 
-A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 1,700 lines and at most 1,000
+A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 1,900 lines and at most 1,150
 statements, needing only Python, `cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds
 one tool, **Hive**, and then you talk:
 
@@ -72,11 +72,15 @@ They live in `<hive>/.git/rapp-hive/`, so copying a whole Hive folder, `.git` in
 their own folder (`RAPP_HIVES`, or `Hives` in your home folder), never inside the Brainstem, its agents or its soul. A
 Hive inside a known sync folder is refused. The Brainstem's frozen core is untouched.
 
+The shared copy is any git remote. A folder shared copy must be a bare git repository: git runs that copy's side of
+every push and fetch, so the Brainstem switches off git's known config hooks there. Anyone who can write the folder can
+still stall it, but cannot sign as a member.
+
 The same file is the checker, with no Brainstem needed:
 
 ```sh
-python agents/hive_agent.py check <hive-folder>
-python agents/hive_agent.py check-public <public-copy-folder>
+python agents/hive_agent.py check <hive-folder> [--root <commit from the invitation>]
+python agents/hive_agent.py check-public <public-copy-folder> [--hive <hive-folder>]
 ```
 
 ## What is here
