@@ -11,8 +11,8 @@ rewrites old records: old signed requests are carried byte for byte, and old key
 
 ## Bringing old Hives along (J12)
 
-Pin the old Hive's folder as a reference (`reference label=<name> path=<folder>`): it stays in its own shape and is read
-only as raw data. Then ask your Brainstem to bring its pending requests along. The `import ref=<name>` action:
+Pin the old Hive's folder, kept outside your Hives folder, as a reference (`reference label=<name> path=<folder>`): it
+stays in its own shape and is read only as raw data. Then ask your Brainstem to bring its pending requests along. The `import ref=<name>` action:
 
 1. reads the reference's identity records and RAPP/1 frames;
 2. finds the signed join requests: `hive2.join` frames, and `join-request` records from old onboarding scripts;

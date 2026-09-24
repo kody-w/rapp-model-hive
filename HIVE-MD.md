@@ -69,13 +69,18 @@ these rules: undoing an admission is a removal. A publication cannot be recalled
 
 ## Refused anywhere
 
-Links, submodules, executables; ```` ```dataviewjs ```` blocks (note apps run them); text that is not UTF-8 or holds control, bidi, invisible or private-use characters (a
-fixed list, so every device agrees; emoji keep the few invisible marks they need: one variation selector after an emoji,
-one in a keycap, and a joiner between two emoji); files over 1 MB (requests: 64 KB), judged by size before they are
-read; files not ending in `.md`; paths over 120 characters (116 under `members/`, so a move to `former/` fits); names
-that break on some system; the instruction-file names `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md`,
-`SKILL.md` and `copilot-instructions.md`; anything else at the root; commit headers other than tree, parent, author,
-committer, gpgsig and `encoding UTF-8`, or any header twice.
+Links, submodules, executables; ```` ```dataviewjs ```` blocks, also after quote, callout or list markers or an indent,
+and Dataview inline JavaScript (inline code starting with `$=`), since note apps run them; text that is not UTF-8 or
+holds control, bidi, invisible or private-use characters (a fixed list, so every device agrees; emoji keep the few
+invisible marks they need: one variation selector after an emoji, one in a keycap, and a joiner between two emoji);
+files over 1 MB (requests: 64 KB), judged by size before they are read; files not ending in `.md`; paths over 120
+characters (116 under `members/`, so a move to `former/` fits); names that break on some system; the instruction-file
+names `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md`, `SKILL.md` and `copilot-instructions.md`; anything else
+at the root; commit headers other than tree, parent, author, committer, gpgsig and `encoding UTF-8`, or any header
+twice.
+
+The checker's rules change only with a new version of this convention, and then only tighten. The dataviewjs rule is
+new in this experimental version.
 
 ## Publishing
 
@@ -88,11 +93,16 @@ named as such) and that the files, `to:` and `hive:` are exactly those of a mani
 ## References
 
 A reference is a folder kept in its own shape (an old Hive that does not follow this convention, a note vault, a wiki,
-a docs folder), pinned by one device in `.git/rapp-hive/references.json`, never committed. It is read-only and
-unattributed: nothing in it is changed, trusted, run or loaded, and what the Brainstem shows from it is fenced raw data.
-Knowledge enters the Hive only when a member brings a piece of it in by one signed commit, into `shared/<room>/` or
-their own folder, with `brought_from: <label>/<path>` and `brought_sha256` added to each file. Another Hive is brought
-from only through its public copy.
+a docs folder), pinned by one device in `.git/rapp-hive/references.json`, never committed. The pin is judged by the
+folder's real path, in any case, and nothing on the way may be a link. It is refused for the filesystem root and the
+home folder; inside or around the Hives folder or the Brainstem's own folders; a hidden part; `~/Library` on macOS,
+except `Mobile Documents` (iCloud Drive) and `CloudStorage`; and a credential folder (`.ssh`, `.gnupg`, `.aws`,
+`.config`, `.kube`, `Keychains`) or one that holds it. A reference is read-only and unattributed: nothing in it is
+changed, trusted, run or loaded, and what the Brainstem shows from it is fenced raw data. Knowledge enters the Hive only
+when a member brings a piece of it in by one signed commit, into `shared/<room>/` or a folder of their own (never
+`approvals/`, `keys/`, `rules/` or `publish/`), with `brought_from: <label>/<path>` and `brought_sha256` added to each
+file. Names are made portable; a name already taken gets `-2`, `-3`, and links follow. Another Hive is brought from
+only through a clean public copy: `PUBLISHED.md`, no `HIVE.md`, and `check-public` finds nothing.
 
 ## Shared copies
 

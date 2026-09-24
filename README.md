@@ -23,12 +23,12 @@ GitHub shows it like any folder. Every change in it is a signed commit, listed i
 | **Approvals**: `members/*/approvals/` | One small file per approval, naming the exact hash it approves. With `approvals: 2`, one approval plus the signed move of the member who admits makes two. Casey approved Drew's admission and the public page. |
 | **The waiting room**: [`requests/frankie/laptop.md`](example/contoso-onboarding/requests/frankie/laptop.md) | Frankie's old rapp-hive/2 join request, carried byte for byte. Nobody admitted him. His note tries to steer your AI; the Brainstem shows it only when asked, fenced as quoted data, and nothing happens without your yes. |
 | **The rooms**: [`shared/`](example/contoso-onboarding/shared/) | Tasks from three apps in three shapes. Casey split onboarding into `week-1` and `week-2` and renamed `misc` to `facilities`, just by moving files. Links name files (`[[T-100]]`), so nothing broke. |
-| **Library**: [`shared/wiki/`](example/contoso-onboarding/shared/wiki/) | Three notes Drew brought in from his own note vault ([`example/sources/drew-notes/`](example/sources/drew-notes/), pinned on his device as a reference and read there as raw data). Each carries `brought_from` and `brought_sha256` stamps saying where it came from; a note with an em dash in its name was renamed, and the link to it followed. The vault's `AGENTS.md` stayed out. |
+| **Library**: [`shared/wiki/`](example/contoso-onboarding/shared/wiki/) | Three notes Drew brought in from his own note vault ([`example/sources/drew-notes/`](example/sources/drew-notes/), pinned on his device as a reference and read there as raw data). Each carries `brought_from` and `brought_sha256` stamps saying where it came from; a note with an em dash in its name was renamed, and the link to it followed. The story adds an `AGENTS.md` to its own copy of the vault (the repo keeps none): shown as data, it stayed out. |
 | **Former residents**: [`former/blake/`](example/contoso-onboarding/former/blake/) | Blake left. His folder moved here whole: his card, his approvals, his weekly-summary instructions, and the copy of his checklist edit kept after a conflict. |
 | **Proposed rules**: `members/casey/rules/` | Casey's proposed HIVE.md that lists the old onboarding Hive's id; Avery approved it before it took effect. |
 | **The public porch**: [`example/contoso-onboarding-public/`](example/contoso-onboarding-public/) | A separate repository. It holds one reviewed page and `PUBLISHED.md`, which lists its hash. |
 
-The story, journey by journey (J1 to J13), with who signed each step, is in [HISTORY.md](example/HISTORY.md).
+The story, journey by journey (J1 to J14), with who signed each step, is in [HISTORY.md](example/HISTORY.md).
 Avery creates the Hive and admits Blake alone; Casey needs two, so Blake approves her request first. Both join with the
 keys they already had. Casey lists the old onboarding Hive in the rules, with Avery's approval, and carries Emery's
 request along. Two members admit Drew and Emery. Apps write tasks in their own shapes. Blake shares how he writes the
@@ -51,7 +51,7 @@ the review, and checks the commits with stock `git verify-commit` and `ssh-keyge
 
 ## How it fits the Brainstem
 
-A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 2,100 lines and at most 1,200
+A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 2,200 lines and at most 1,300
 statements, needing only Python, `cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds
 one tool, **Hive**, and then you talk:
 
