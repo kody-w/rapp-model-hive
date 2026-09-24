@@ -69,7 +69,7 @@ these rules: undoing an admission is a removal. A publication cannot be recalled
 
 ## Refused anywhere
 
-Links, submodules, executables; text that is not UTF-8 or holds control, bidi, invisible or private-use characters (a
+Links, submodules, executables; ```` ```dataviewjs ```` blocks (note apps run them); text that is not UTF-8 or holds control, bidi, invisible or private-use characters (a
 fixed list, so every device agrees; emoji keep the few invisible marks they need: one variation selector after an emoji,
 one in a keycap, and a joiner between two emoji); files over 1 MB (requests: 64 KB), judged by size before they are
 read; files not ending in `.md`; paths over 120 characters (116 under `members/`, so a move to `former/` fits); names
@@ -84,6 +84,15 @@ A manifest in `members/<name>/publish/` names the public copy and lists `sha256 
 signed commit. `check-public` checks the committed tree: plain files only, each listed with its hash, nothing else.
 With `--hive`, it also checks that every public commit is signed by a current member (a former member's signature is
 named as such) and that the files, `to:` and `hive:` are exactly those of a manifest the Hive approved.
+
+## References
+
+A reference is a folder kept in its own shape (an old Hive that does not follow this convention, a note vault, a wiki,
+a docs folder), pinned by one device in `.git/rapp-hive/references.json`, never committed. It is read-only and
+unattributed: nothing in it is changed, trusted, run or loaded, and what the Brainstem shows from it is fenced raw data.
+Knowledge enters the Hive only when a member brings a piece of it in by one signed commit, into `shared/<room>/` or
+their own folder, with `brought_from: <label>/<path>` and `brought_sha256` added to each file. Another Hive is brought
+from only through its public copy.
 
 ## Shared copies
 
