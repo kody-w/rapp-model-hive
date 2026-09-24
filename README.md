@@ -1,90 +1,92 @@
-# Contoso Model Hive
+# Contoso Model Hive (the tree of markdown files)
 
 **A model Hive, like a model home: everything is furnished so you can walk through it, but nobody lives here.**
 
 > [!WARNING]
-> **Everything here is synthetic.** Contoso is a fictional company. Its people and devices are invented, and every signature uses a **public test key** that anyone can re-derive from a published label (see `test_key` in [`vendor/rapp_hive2/sign.py`](vendor/rapp_hive2/sign.py)). Those keys prove nothing about anyone. Never use them, or this Hive, for real data.
+> **Everything here is synthetic.** Contoso is a made-up company, and its people and devices are invented. Every key is a
+> **public test key** that anyone can re-derive from a published label (`test_key` in
+> [`tools/build_example.py`](tools/build_example.py)). Those keys prove nothing. Never use them, or this Hive, for real data.
 
-This repository shows the **experimental frontier draft `rapp-hive/2`** (canary ring) working end to end, starting from a Hive on the current version (`rapp-hive/1`) and moving it forward without rewriting a single old frame.
+**Status: experimental.** This branch (`experimental/hive-md`) rebuilds the model as a Hive that is just a tree of markdown
+files ([HIVE-MD.md](HIVE-MD.md), one page). This repository's `main` branch (commit `83e039f`) keeps the frozen rapp-hive/2
+model as a research record; see [MIGRATION.md](MIGRATION.md).
 
-| Read the protocol | |
+## The house tour
+
+The house is [`example/contoso-onboarding/`](example/contoso-onboarding/): the team's Hive after the whole story below.
+GitHub shows it like any folder. Every change in it is a signed commit, listed in [`example/HISTORY.md`](example/HISTORY.md).
+
+| Room | What you see |
 |---|---|
-| [`rapp-hive/2` specification](https://github.com/kody-w/rapp-workspace/blob/experimental/frontier-rapp-hive-2/protocols/rapp-hive/2/SPEC.md) | co-equal Hives of sovereign streams |
-| [Migration paths](https://github.com/kody-w/rapp-workspace/blob/experimental/frontier-rapp-hive-2/protocols/rapp-hive/2/MIGRATION.md) | from `rapp-hive/1` or a repository-seeded Hive |
-| [`rapp-schema/1` specification](https://github.com/kody-w/rapp-workspace/blob/experimental/frontier-rapp-hive-2/protocols/rapp-schema/1/SPEC.md) | the bare shape of a frame, the thing lenses map |
-| [RAPP/1](https://github.com/kody-w/rapp-1) | the signed frames everything is made of |
+| **Front door**: [`HIVE.md`](example/contoso-onboarding/HIVE.md) | The only rules: the Hive's id, `approvals: 2` (the default), a `fields` hint, and `previous`: the ids of two old Hives whose signed requests are honored. |
+| **Residents**: [`members/`](example/contoso-onboarding/members/) | Avery, Casey, Drew and Emery. Each folder is that member's space: only their own signed commits change it, apart from two governed moves (admission moves their own request in; removal moves the folder to `former/`). `keys/` is the roster: a key file is a signed request that was moved in. Avery's keys show her new laptop; Emery's show she moved off the shared kiosk. |
+| **Approvals**: `members/*/approvals/` | One small file per approval, naming the exact hash it approves. With `approvals: 2`, one approval plus the signed move of the member who admits makes two. Casey approved Drew's admission and the public page. |
+| **The waiting room**: [`requests/frankie/laptop.md`](example/contoso-onboarding/requests/frankie/laptop.md) | Frankie's old rapp-hive/2 join request, carried byte for byte. Nobody admitted him. His note tries to steer your AI; the Brainstem shows it only when asked, fenced as quoted data, and nothing happens without your yes. |
+| **The rooms**: [`shared/`](example/contoso-onboarding/shared/) | Tasks from three apps in three shapes. Casey split onboarding into `week-1` and `week-2` and renamed `misc` to `facilities`, just by moving files. Links name files (`[[T-100]]`), so nothing broke. |
+| **Former residents**: [`former/blake/`](example/contoso-onboarding/former/blake/) | Blake left. His folder moved here whole: his card, his approvals, his weekly-summary instructions, and the copy of his checklist edit kept after a conflict. |
+| **Proposed rules**: `members/casey/rules/` | Casey's proposed HIVE.md that lists the old onboarding Hive's id; Avery approved it before it took effect. |
+| **The public porch**: [`example/contoso-onboarding-public/`](example/contoso-onboarding-public/) | A separate repository. It holds one reviewed page and `PUBLISHED.md`, which lists its hash. |
 
-Nothing here is authority: it is a draft on an experimental branch and may change.
+The story, journey by journey (J1 to J13), with who signed each step, is in [HISTORY.md](example/HISTORY.md).
+Avery creates the Hive and admits Blake alone; Casey needs two, so Blake approves her request first. Both join with the
+keys they already had. Casey lists the old onboarding Hive in the rules, with Avery's approval, and carries Emery's
+request along. Two members admit Drew and Emery. Apps write tasks in their own shapes. Blake shares how he writes the
+weekly summary, and Casey adopts it. Blake edits offline while Casey reorganizes, undoes and redoes. Frankie's forged
+push is refused and reset. Avery gets a new laptop and publishes a reviewed page. Blake leaves.
 
-## Walk through it
+## Try it in three commands
 
-Pick whichever door suits you:
-
-- **In a browser.** Download [`app/model-hive.html`](app/model-hive.html) and open it. It is one self-contained file that works offline, verifies every signature in your browser, and lets you try crossings, tamper with a copy and watch it be refused.
-- **As a tour you can read.** Start with [`tour/CONTEXT.md`](tour/CONTEXT.md). There are seven rooms:
-
-  | Room | What you will see |
-  |---|---|
-  | [1. Front door](tour/01-front-door.md) | what a model Hive is and how to check it yourself |
-  | [2. Residents](tour/02-residents.md) | who is in, how they got in, who is waiting |
-  | [3. Renovation](tour/03-renovation.md) | the move from `rapp-hive/1` to `rapp-hive/2` |
-  | [4. Schemas and lenses](tour/04-schemas-and-lenses.md) | how different app shapes meet in one view |
-  | [5. Crossings](tour/05-crossings.md) | one person's message, as another person's app would read it |
-  | [6. Agreement](tour/06-agreement.md) | how devices agree without a master copy |
-  | [7. Timeline](tour/07-timeline.md) | every signed step, in order |
-
-- **With your AI.** Any assistant can read [`AGENTS.md`](AGENTS.md) and guide you. A RAPP Brainstem can hotload [`agents/model_hive_agent.py`](agents/model_hive_agent.py) and then answer "show me the residents" or "how would Blake's task look on Avery's laptop?".
-
-## What happens in the model
-
-1. **The current version.** Avery owns a `rapp-hive/1` Hive with Blake and Casey, declared as the first frame of its Mother Hive stream and signed by Avery, exactly as `rapp-hive/1` requires. Avery's laptop app and Blake's phone app write tasks in different shapes, and an old onboarding script records Emery's request to join.
-2. **The renovation.** Avery accepts a `rapp-hive/2` anchor whose first policy lets only Avery decide, exactly like `rapp-hive/1`. Blake and Casey each sign their own join, and Avery grants them. Emery's old request is carried as a pending request under that first policy.
-3. **Co-equal peers.** Policy v2 makes every member a decider: two grants plus a key someone has confirmed. Emery's old request is still decided under v1, so Blake's approval does not count and Avery's alone is enough. Drew gets in with two grants and a confirmed key. Frankie is still waiting, and Frankie's task sits in quarantine until then; quarantined messages never teach the Hive anything.
-4. **Schemas and lenses.** A shape that only gains a field is learned automatically. A renamed field needs a lens that people adopt. A careless lens that would change what old tasks mean is refused even though two people signed it. A brand-new "reaction" shape waits for a lens while everything else keeps working.
-5. **Crossings.** Blake's task cannot cross to Avery's laptop, because it has no due date and the Hive will not invent one. Avery's task crosses to Blake's phone, and the due date is named as what stays behind.
-6. **Agreement.** Three devices sign matching manifests. Blake's phone signed while offline, so it is consistent but behind. There is no master copy to trust.
-
-The Hive's identity (its anchor) is:
-
-```
-03972c7e8049b59134681ef9b1d7af369e4b06273d262691c5b28d6c48dcdce8
-```
-
-## Check it yourself
-
-You need Python 3.11 or later with `cryptography`, and Node 20 or later for the browser-engine parity check.
+You need Python 3.11 or later and git 2.29 or later.
 
 ```sh
-python3 -m pip install "cryptography>=43"
-
-cd vendor
-python3 -B -m rapp_hive2 status ../model/hive          # plain language
-python3 -B -m rapp_hive2 verify ../model/hive --anchor 03972c7e8049b59134681ef9b1d7af369e4b06273d262691c5b28d6c48dcdce8
-python3 -B -m rapp_hive2 cross ../model/hive 29a20deff3bb avery-laptop    # refused: no invented due date
-python3 -B -m rapp_hive2 vectors --check ../conformance/vectors.json
-cd ..
-
-python3 -B tools/build.py --check        # model/ and tour/ are exactly what the reference builds
-python3 -B tools/build_app.py --check    # the page is exactly what its sources build
-node tests/parity.mjs                    # the browser engine matches every conformance vector
-python3 -B -m unittest discover -s tests -v
+python -m pip install "cryptography>=43"
+python tools/build_example.py --check
+python -m unittest discover -s tests -v
 ```
 
-## What is inside
+The second command replays the whole story on real git repositories in a temporary folder, with a fresh agent instance
+for every turn, and checks that it rebuilds `example/` byte for byte. The third runs every journey and every attack from
+the review, and checks the commits with stock `git verify-commit` and `ssh-keygen -Y verify`.
+
+## How it fits the Brainstem
+
+A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), under 1,000 lines, needing only Python,
+`cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds one tool, **Hive**, and then you talk:
+
+- "Start a Contoso Onboarding Hive." "I'd like to join the Hive at this address." "Let Drew in."
+- "What's open this week?" "Save" (after moving files around in Finder or Explorer). "Undo that."
+- "Adopt Blake's weekly summary." "Publish our checklist page." "I'm leaving the Hive."
+
+Every change is a proposal first, in plain words. It happens only when you say yes in your next message, as one signed
+commit. An edit can be undone by a new signed commit if nothing changed since; a membership or rules change only through
+the rules (undoing an admission is a removal); and a publication cannot be recalled from anyone who already copied it.
+
+Text read from a Hive is fenced as quoted data. That makes it harder to steer your AI, not impossible; what holds is that
+nothing applies until you confirm the exact plan. Nothing in a Hive is ever run or installed: code you want to use, you
+copy into `agents/` yourself, after reading it.
+
+A member is usually a person; a team or an agent with its own keys can be one too. One member has one vote, and a device
+is not a member. Each device gets its own key for each Hive, so your Hives cannot be linked. Keys are never committed.
+They live in `<hive>/.git/rapp-hive/`, so copying a whole Hive folder, `.git` included, copies the key. Hives live in
+their own folder (`RAPP_HIVES`, or `Hives` in your home folder), never inside the Brainstem, its agents or its soul. A
+Hive inside a known sync folder is refused. The Brainstem's frozen core is untouched.
+
+The same file is the checker, with no Brainstem needed:
+
+```sh
+python agents/hive_agent.py check <hive-folder>
+python agents/hive_agent.py check-public <public-copy-folder>
+```
+
+## What is here
 
 | Path | What it is |
 |---|---|
-| `model/hive/` | the migrated Hive: `HIVE.json`, identity records, content-addressed objects and one signed stream per device |
-| `model/before/` | the same Hive before migration, on `rapp-hive/1` |
-| `model/STORY.json` | labels and narration for the tour and the page (derived, never authority) |
-| `tour/` | the rooms, generated from the signed frames |
-| `app/model-hive.html` | the single-file browser tour, built from `app/src/` by `tools/build_app.py` |
-| `agents/model_hive_agent.py` | a hotloadable RAPP Brainstem agent |
-| `vendor/rapp_hive2/` | the reference implementation, copied from an exact commit (see `vendor/PROVENANCE.json`) |
-| `conformance/vectors.json` | the protocol's conformance vectors, pinned with the reference |
+| [`HIVE-MD.md`](HIVE-MD.md) | The convention, on one page |
+| [`agents/hive_agent.py`](agents/hive_agent.py) | The Brainstem agent and the checker |
+| [`example/`](example/) | The model home, its public copy and its history |
+| [`tools/build_example.py`](tools/build_example.py) | Builds `example/` by talking to the agent through journeys J1 to J13 |
+| [`tests/`](tests/) | The tests, and old signed frames from `main` for parity |
+| [`MIGRATION.md`](MIGRATION.md) | rapp-hive/2 frozen, old Hives brought along, real Hives |
 
-Everything in `model/`, `tour/` and `app/model-hive.html` is generated. Do not edit it by hand: change the reference or the builders, then rebuild. To follow a newer reference, run `python3 -B tools/vendor.py <rapp-workspace checkout> <commit>`, delete `model/` and `tour/`, and rebuild.
-
-## License
-
-[MIT](LICENSE).
+MIT licensed. See [LICENSE](LICENSE).

@@ -1,0 +1,19 @@
+---
+request: rapp-hive
+hive: 185d0eb5d4b1247b260042d0d840d5c3
+name: blake
+device: phone
+key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICU5jgIhnEE7TLJVCax/DnwFAlgj2LnK90U9oMiFdycf
+utc: 2026-09-24T09:10:00Z
+---
+
+blake asks to join from their phone.
+
+```ssh-signature
+-----BEGIN SSH SIGNATURE-----
+U1NIU0lHAAAAAQAAADMAAAALc3NoLWVkMjU1MTkAAAAgJTmOAiGcQTtMslUJrH8OfAUCWC
+PYucr3RT2gyIV3Jx8AAAARcmFwcC1oaXZlLXJlcXVlc3QAAAAAAAAABnNoYTUxMgAAAFMA
+AAALc3NoLWVkMjU1MTkAAABA91cTGLvN+s91F97HN4iNKkcsj2JHbxsW/LiOA6B7my4QR2
+GfTTluQ7Aq/OkIHp0pXsNz38q0dDJbe7aFrpBHAg==
+-----END SSH SIGNATURE-----
+```

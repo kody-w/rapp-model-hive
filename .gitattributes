@@ -1,2 +1,2 @@
-# Every file is hashed or compared byte for byte: never convert line endings.
-* -text
+# The example tree and test vectors are compared byte for byte: keep LF on every system.
+* text=auto eol=lf

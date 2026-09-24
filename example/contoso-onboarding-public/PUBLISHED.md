@@ -1,0 +1,6 @@
+---
+manifest: 1dcfa66f8a50e8158b98da5cdb6777f1b72afbf8a9446c0ed67fd18e2b63a4df
+hive: 185d0eb5d4b1247b260042d0d840d5c3
+---
+
+fdca620c9e6d45c4d820cbf48532327d70242047c62d6f7e39a2584339af436a  how-contoso-onboards.md

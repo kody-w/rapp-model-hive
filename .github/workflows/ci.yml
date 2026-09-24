@@ -28,19 +28,13 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-      - name: Install the one dependency
+      - name: Install the one dependency (git is the other)
         run: python -m pip install "cryptography>=43"
-      - name: The model and tour are exactly what the reference builds
-        run: python -B tools/build.py --check
-      - name: The page is exactly what its sources build
-        run: python -B tools/build_app.py --check
-      - name: The browser engine matches every conformance vector
-        run: node tests/parity.mjs
-      - name: Conformance vectors through the reference command line
-        working-directory: vendor
-        run: python -B -m rapp_hive2 vectors --check ../conformance/vectors.json
-      - name: Tests (the page is also rendered in headless Chrome)
+      - name: Tools on this runner
+        run: |
+          git --version
+          python -c "import shutil; print('ssh-keygen:', shutil.which('ssh-keygen'))"
+      - name: The model home is exactly what the story builds
+        run: python -B tools/build_example.py --check
+      - name: Journeys, attacks, interop with stock git and ssh-keygen, RAPP/1 parity
         run: python -B -m unittest discover -s tests -v
