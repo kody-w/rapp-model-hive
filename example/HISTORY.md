@@ -37,17 +37,17 @@ real data. Times come from a fixed clock and carry no authority.
 | 26 | `bb490cb578` | J5, J7 | casey | `SHA256:VmswiJNYLiLa…` | Save 9 change(s) made by hand | yes |
 | 27 | `5532028921` | J5, J7 | casey | `SHA256:VmswiJNYLiLa…` | Undo bb490cb578: Save 9 change(s) made by hand | yes |
 | 28 | `488e69d887` | J5, J7 | casey | `SHA256:VmswiJNYLiLa…` | Undo 5532028921: Undo bb490cb578: Save 9 change(s) made by hand | yes |
-| 29 | `3cc5dff36e` | J8 | blake | `SHA256:i2Y91a2TrmTw…` | Save 2 change(s) made by hand | yes |
-| 30 | `579078c514` | J10 | a request from key SHA256:6Nm/kTA2gh2YMe4tXXch56r2982pB4AQ0c4H7kBbnhI (asking as avery) | `SHA256:6Nm/kTA2gh2Y…` | Ask to join (avery, laptop2) | yes |
-| 31 | `fcef1271ec` | J10 | avery | `SHA256:q18VTrWDieC+…` | Add avery's device laptop2 | yes |
-| 32 | `8ef86aee4e` | J10 | avery | `SHA256:6Nm/kTA2gh2Y…` | Retire avery's device laptop | yes |
-| 33 | `2ceb4c72f9` | J10 | a request from key SHA256:baCLFNtKLEHa9DFUuiFL4Ogl+NRgIWTismWLEtZio1o (asking as emery) | `SHA256:baCLFNtKLEHa…` | Ask to join (emery, phone) | yes |
-| 34 | `ae18958d03` | J10 | emery | `SHA256:BhIR0LQblbmp…` | Add emery's device phone | yes |
-| 35 | `d1f87e6a01` | J10 | emery | `SHA256:baCLFNtKLEHa…` | Retire emery's device kiosk | yes |
-| 36 | `8ebf302051` | J11 | avery | `SHA256:6Nm/kTA2gh2Y…` | Save shared/public-page/how-contoso-onboards.md | yes |
-| 37 | `30d0c5f660` | J11 | avery | `SHA256:6Nm/kTA2gh2Y…` | Propose publishing 1 file(s) | yes |
-| 38 | `055e7ab36e` | J11 | casey | `SHA256:VmswiJNYLiLa…` | Approve publish 1dcfa66f8a50 | yes |
-| 39 | `e3df034d5a` | J6 | blake | `SHA256:i2Y91a2TrmTw…` | blake leaves | yes |
+| 29 | `a307a9196d` | J8 | blake | `SHA256:i2Y91a2TrmTw…` | Save 2 change(s) made by hand | yes |
+| 30 | `247e27aff8` | J10 | a request from key SHA256:6Nm/kTA2gh2YMe4tXXch56r2982pB4AQ0c4H7kBbnhI (asking as avery) | `SHA256:6Nm/kTA2gh2Y…` | Ask to join (avery, laptop2) | yes |
+| 31 | `0de638d60a` | J10 | avery | `SHA256:q18VTrWDieC+…` | Add avery's device laptop2 | yes |
+| 32 | `f9808d23a5` | J10 | avery | `SHA256:6Nm/kTA2gh2Y…` | Retire avery's device laptop | yes |
+| 33 | `12093a90c0` | J10 | a request from key SHA256:baCLFNtKLEHa9DFUuiFL4Ogl+NRgIWTismWLEtZio1o (asking as emery) | `SHA256:baCLFNtKLEHa…` | Ask to join (emery, phone) | yes |
+| 34 | `0c1b42e552` | J10 | emery | `SHA256:BhIR0LQblbmp…` | Add emery's device phone | yes |
+| 35 | `f6cf39a55f` | J10 | emery | `SHA256:baCLFNtKLEHa…` | Retire emery's device kiosk | yes |
+| 36 | `501ceacdb6` | J11 | avery | `SHA256:6Nm/kTA2gh2Y…` | Save shared/public-page/how-contoso-onboards.md | yes |
+| 37 | `b242d1c521` | J11 | avery | `SHA256:6Nm/kTA2gh2Y…` | Propose publishing 1 file(s) | yes |
+| 38 | `acef781f6a` | J11 | casey | `SHA256:VmswiJNYLiLa…` | Approve publish 1dcfa66f8a50 | yes |
+| 39 | `bd510aa5af` | J6 | blake | `SHA256:i2Y91a2TrmTw…` | blake leaves | yes |
 
 ## Refused, never part of the history
 
@@ -56,7 +56,7 @@ any verifying device would, and her reset put the shared copy back to the last v
 
 | Commit | Written as | Key | Rule |
 |---|---|---|---|
-| `d529590e85` | frankie | `SHA256:ydV5GSVDnWq4…` | a key that is not a member's may only add one request under `requests/` |
+| `af469f623c` | frankie | `SHA256:ydV5GSVDnWq4…` | a key that is not a member's may only add one request under `requests/` |
 
 ## The public copy
 

@@ -72,9 +72,9 @@ They live in `<hive>/.git/rapp-hive/`, so copying a whole Hive folder, `.git` in
 their own folder (`RAPP_HIVES`, or `Hives` in your home folder), never inside the Brainstem, its agents or its soul. A
 Hive inside a known sync folder is refused. The Brainstem's frozen core is untouched.
 
-The shared copy is any git remote. A folder shared copy must be a bare git repository: git runs that copy's side of
-every push and fetch, so the Brainstem switches off git's known config hooks there. Anyone who can write the folder can
-still stall it, but cannot sign as a member.
+The shared copy is a git remote (ssh, https or git) or a folder. A folder shared copy must be a bare git repository:
+git runs that copy's side of every push and fetch, so the Brainstem switches off git's known config hooks there. Anyone
+who can write the folder can still stall it, but cannot sign as a member.
 
 The same file is the checker, with no Brainstem needed:
 

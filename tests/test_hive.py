@@ -250,6 +250,21 @@ class Story(unittest.TestCase):
         for name in ("avery", "blake", "casey", "drew", "emery", "frankie", "@"):
             self.assertNotIn(name, page.lower())
 
+    def test_J11_check_public_with_the_hive_compares_the_approved_manifest(self):
+        copy = os.path.join(self.root, "check", "contoso-onboarding-public")  # same name, so `to:` matches
+        shutil.copytree(self.r["public"], copy)
+        hive = self.dev["avery-laptop2"].hive
+        self.assertEqual(ha.check_public(copy, hive), [])
+        head = ha.rev(copy, "HEAD")
+        listing = ha.Snap(copy, head).raw("PUBLISHED.md").decode() + f"{ha.sha('# Extra')}  extra.md\n"
+        writes = {"extra.md": b"# Extra", "PUBLISHED.md": listing.encode()}  # self-consistent, never approved
+        for key, words in ((be.test_key("avery-laptop2"), "are not those of a manifest"),
+                           (be.test_key("blake-phone"), "is signed by former member blake")):
+            commit = ha.make_commit(copy, ha.build_tree(copy, head, writes), head, "avery", "Add a page", key)
+            ha.git(copy, "update-ref", "refs/heads/main", commit)
+            self.assertEqual(ha.check_public(copy), [])
+            self.assertTrue(any(words in p for p in ha.check_public(copy, hive)), ha.check_public(copy, hive))
+
     def test_J12_old_hives_carried_byte_for_byte(self):
         previous = ha.listed(self.final.meta, "previous")
         self.assertEqual(previous, [be.RAPP_HIVE_2_ANCHOR, "77086a0d3de14331843c1b8d1217090e5a849675f62265727f5bdb541507a9d8"])
@@ -305,9 +320,10 @@ class Story(unittest.TestCase):
     def test_stock_git_and_ssh_keygen_verify_everything(self):
         exec_path = subprocess.run(["git", "--exec-path"], capture_output=True, text=True).stdout.strip()  # Git for Windows bundles a recent OpenSSH
         bundled = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(exec_path))), "usr", "bin", "ssh-keygen.exe")
-        keygen = bundled if os.name == "nt" and os.path.isfile(bundled) else shutil.which("ssh-keygen")
+        keygen = (bundled if os.path.isfile(bundled) else None) if os.name == "nt" else shutil.which("ssh-keygen")
         if not keygen:
-            self.skipTest("ssh-keygen is not installed, so stock verification cannot run here")
+            self.skipTest("Git for Windows' bundled ssh-keygen was not found" if os.name == "nt"
+                          else "ssh-keygen is not installed, so stock verification cannot run here")
         signers = os.path.join(self.root, "allowed_signers")
         keys = set()
         for commit in self.commits:
@@ -574,9 +590,15 @@ class Attacks(HiveTest):
 
     def test_bidi_zero_width_and_control_characters_are_refused(self):
         for text in ("a\u202eb", "a\u200bb", "a\u2066b", "a\rb", "a\x00b", "a\ufeffb", b"\xff\xfe", "a\U000e0041b", "a\u2028b",
-                     "a\ufe0fb", "a\U000e0100b", "a\u00adb", "a\u3164b", "a\ue000b", "a\U0001fffeb", "a\U00100000b"):
+                     "a\ufe0fb", "a\U000e0100b", "a\u00adb", "a\u3164b", "a\ue000b", "a\U0001fffeb", "a\U00100000b",
+                     "a\U0001bca0b", "a\U0001d173b", "a\U00013430b", "\u2764\ufe0f\ufe0f", "\u2764\ufe0f\ufe0e", "\u2764\U000e0100",
+                     "\u2764\u200d", "\u2764\u200d\u200d\U0001f525", "\U0001f3f4\U000e0067\U000e0062\U000e007f", "#\ufe0f", "\u200d\U0001f525",
+                     "\u2764\ufe0e\u200d\U0001f525"):
             self.refused(self.A, forge(self.A, {"shared/x/t.md": text}))
         self.assertEqual(judge(self.A, forge(self.A, {"shared/x/ok.md": "Tabs\tand accents: café, naïve.\n"})), "avery")
+        emoji = "Launch \U0001f680 \u2764\ufe0f \u2764\ufe0f\u200d\U0001f525 \U0001f468\u200d\U0001f469\u200d\U0001f467 1\ufe0f\u20e3 \u00a9\ufe0f \u263a\ufe0e " \
+                "\U0001f3f3\ufe0f\u200d\U0001f308 \U0001f44d\U0001f3fd \U0001f1e8\U0001f1e6\n"  # what phones write
+        self.assertEqual(judge(self.A, forge(self.A, {"shared/x/emoji.md": emoji})), "avery")
 
     def test_gitattributes_is_fixed_and_former_is_append_only(self):
         self.refused(self.A, forge(self.A, {".gitattributes": "* text\n"}), ".gitattributes")
@@ -691,6 +713,29 @@ class Attacks(HiveTest):
         self.assertIn(f"former/{name}/" + path[len(f"members/{name}/"):], files)
         self.assertIn(f"former/{name}-2/" + path[len(f"members/{name}/"):], files)
         self.refused(self.A, forge(self.A, {"members/avery/" + "w" * 60 + "/" + "v" * (ha.MAX_MEMBER_PATH - 75) + ".md": "# x\n"}), "116 under members/")
+
+    def test_a_retired_devices_request_is_never_filed_again(self):
+        B2 = self.device("blake-laptop")
+        self.join(B2, "blake", "laptop")
+        self.B.say(action="sync")
+        self.B.do(action="add_device", device="laptop")
+        B2.say(action="sync")
+        old = ha.Snap(B2.hive, ha.rev(B2.hive, "HEAD")).raw("members/blake/keys/phone.md")
+        B2.do(action="remove", device="phone")  # the phone's key file is in no tree any more
+        self.refused(B2, forge(B2, {"requests/blake/phone.md": old}), "never filed again")
+
+    def test_verification_follows_first_parents_and_resets_stay_on_that_line(self):
+        repo = ha.Hive(self.A.home, be.HIVE).path
+        head = ha.rev(repo, "HEAD")
+        first, side = forge(self.A, {"shared/x/a.md": "# A\n"}), forge(self.A, {"shared/y/b.md": "# B\n"})
+        tree, ident = f"tree {ha.git(repo, 'rev-parse', first + '^{tree}').decode().strip()}", f"avery <avery@hive.invalid> {ha.now()} +0000"
+        merge = raw_commit(self.A, [tree, f"parent {first}", f"parent {side}", f"author {ident}", f"committer {ident}"])
+        ha.git(repo, "push", "-q", "--", self.bare, f"{merge}:refs/heads/main")
+        with self.assertRaises(ha.Refused) as caught:
+            ha.verify(repo, info(self.A)["root"], merge, since=head)
+        self.assertEqual((caught.exception.commit, caught.exception.last), (merge, first))
+        self.assertIn(f"Reset the shared copy to {first[:10]}, the last verified commit", self.B.say(action="sync"))
+
 
     def test_merges_parentless_commits_and_odd_headers_are_refused(self):
         repo = ha.Hive(self.A.home, be.HIVE).path
@@ -900,7 +945,8 @@ class Conversation(HiveTest):
         self.assertEqual(ha.check_public(folder), [])  # self-consistent: every file listed with its hash
         ha.put(os.path.join(folder, "slipped.md"), b"# Not committed\n")  # only the committed tree counts
         self.assertEqual(ha.check_public(folder), [])
-        self.assertEqual(ha.check_public(folder, self.A.hive), ["PUBLISHED.md does not name a manifest that this Hive approved"])
+        self.assertEqual(ha.check_public(folder, self.A.hive),
+                         ["the committed files, `to:` and `hive:` are not those of a manifest this Hive approved"])
         head = ha.rev(folder, "HEAD")
         link = ha.git(folder, "hash-object", "-w", "--stdin", data=b"../../outside").decode().strip()
         entries = {**ha.tree(folder, head), "slipped.md": ("100644", ha.tree(folder, head)["page.md"][1]), "link.md": ("120000", link)}
@@ -943,6 +989,27 @@ class Conversation(HiveTest):
         self.assertFalse(os.path.exists(os.path.join(alternates, "ran-marker")))
         self.not_done(self.A.say(action="join", address=work, id="0" * 40, name="x", device="y", hive="other"), "must be a bare")
 
+    def test_a_malformed_key_file_is_refused_not_a_crash(self):
+        self.A.write("members/avery/keys/tablet.md", "---\nrequest: carried\nspki: not-base64!\n---\n")
+        self.assertIn("does not hold a readable Ed25519 key", self.A.say(action="save"))
+
+    def test_conflict_copies_of_long_paths_always_fit(self):
+        path = "shared/" + "x" * 50 + "/" + "y" * (ha.MAX_PATH - 61) + ".md"
+        self.assertEqual(len(path), ha.MAX_PATH)
+        self.A.do(action="save", path=path, text="# A\n")
+        self.B.say(action="sync")
+        address = self.B.remote(os.path.join(self.root, "nowhere.git"))
+        self.B.do(action="save", path=path, text="# B\n")  # offline
+        self.A.do(action="save", path=path, text="# A again\n")
+        self.B.remote(address)
+        plan = PLAN.search(self.B.say(action="sync"))[1]  # the same file changed on both sides
+        self.clock.tick()
+        self.assertIn("Re-applied", self.B.say(action="apply", plan=plan))
+        kept = [p for p in ha.tree(self.bare, ha.rev(self.bare, "main")) if p.startswith("members/blake/kept/")]
+        self.assertEqual(len(kept), 1)
+        self.assertLessEqual(len(kept[0]), ha.MAX_MEMBER_PATH)
+        self.assertEqual(ha.Snap(self.bare, ha.rev(self.bare, "main")).text(kept[0]), "# B\n")
+
     def test_shared_copy_addresses(self):
         base = os.path.join(self.root, "hive")
         for address in ("ssh://host/team.git", "https://host/team.git", "git://host/team.git", "host:team.git", "me@host:team.git"):
@@ -950,8 +1017,10 @@ class Conversation(HiveTest):
         for address, folder in (("./team.git", os.path.join(base, "./team.git")), ("../team.git", os.path.join(base, "../team.git")),
                                 (self.bare, self.bare), ("C:/team.git", os.path.join(base, "C:/team.git"))):
             self.assertEqual(ha.shared_folder(address, base), folder)
-        with self.assertRaises(ha.Refused):
-            ha.shared_folder("team.git", base)  # neither a network address nor a clear folder path
+        for address in ("team.git", "http://host/team.git", "ext::sh -c touch% marker", "fd::17", "rsync://host/team.git"):
+            with self.assertRaises(ha.Refused):
+                ha.shared_folder(address, base)  # not an allowed network address, nor a clear folder path
+        self.not_done(self.A.say(action="join", address="ext::sh -c touch% marker", id="0" * 40, name="x", device="y", hive="z"))
 
     def test_sync_and_push_plans_apply_only_to_what_was_shown(self):
         before = ha.rev(self.bare, "main")

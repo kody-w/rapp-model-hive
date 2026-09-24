@@ -12,7 +12,7 @@ Ed25519 signatures are deterministic, so every build makes the same commit ids o
     python tools/build_example.py           rebuild example/
     python tools/build_example.py --check   rebuild in a temporary folder and compare with example/
 """
-import filecmp, hashlib, json, os, re, shutil, stat, sys, tempfile
+import filecmp, hashlib, json, os, re, shutil, sys, tempfile
 from datetime import datetime, timedelta, timezone
 
 from cryptography.hazmat.primitives import serialization
@@ -34,11 +34,7 @@ def test_key(slug):
     return Ed25519PrivateKey.from_private_bytes(hashlib.sha256((TEST_KEY_LABEL + "contoso-model-hive/" + slug).encode()).digest())
 
 
-def rmtree(path):
-    def fix(func, p, _):
-        os.chmod(p, stat.S_IWRITE)
-        func(p)
-    shutil.rmtree(path, **({"onexc": fix} if sys.version_info >= (3, 12) else {"onerror": fix}))
+rmtree = ha.remove_tree  # read-only git objects on Windows, and files locked for a moment
 
 
 class Clock:

@@ -59,9 +59,10 @@ Judged by the tree at the parent, the signer may change:
 - **rules**: change `HIVE.md` with max(1, min(max(old, new `approvals`), members)) approvals naming both hashes.
 
 *threshold* = max(1, min(`approvals`, members)), so a founder admits the first member alone. The signer counts once, and
-only current members' approvals of the exact hash count. A request that was admitted once is never filed again: coming
-back takes a new request. `hive` and `.gitattributes` never change; `former/` only receives leaving and removal moves.
-Everything else is refused, and the first refused commit stops verification.
+only current members' approvals of the exact hash count. A request that was ever admitted, even for a device retired
+since, is never filed again: coming back takes a new request. History is one line: each commit's one parent is the
+commit that passed just before it. `hive` and `.gitattributes` never change; `former/` only receives leaving and removal
+moves. Everything else is refused, and the first refused commit stops verification.
 
 An edit can be undone by a new signed commit if nothing changed since. Membership and rules change back only through
 these rules: undoing an admission is a removal. A publication cannot be recalled from anyone who already copied it.
@@ -69,25 +70,28 @@ these rules: undoing an admission is a removal. A publication cannot be recalled
 ## Refused anywhere
 
 Links, submodules, executables; text that is not UTF-8 or holds control, bidi, invisible or private-use characters (a
-fixed list, so every device agrees); files over 1 MB (requests: 64 KB), judged by size before they are read; files not
-ending in `.md`; paths over 120 characters (116 under `members/`, so a move to `former/` fits); names that break on
-some system; the instruction-file names `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md`, `SKILL.md` and
-`copilot-instructions.md`; anything else at the root; commit headers other than tree, parent, author, committer, gpgsig
-and `encoding UTF-8`, or any header twice.
+fixed list, so every device agrees; emoji keep the few invisible marks they need: one variation selector after an emoji,
+one in a keycap, and a joiner between two emoji); files over 1 MB (requests: 64 KB), judged by size before they are
+read; files not ending in `.md`; paths over 120 characters (116 under `members/`, so a move to `former/` fits); names
+that break on some system; the instruction-file names `AGENTS.md`, `CLAUDE.md`, `CLAUDE.local.md`, `GEMINI.md`,
+`SKILL.md` and `copilot-instructions.md`; anything else at the root; commit headers other than tree, parent, author,
+committer, gpgsig and `encoding UTF-8`, or any header twice.
 
 ## Publishing
 
 A manifest in `members/<name>/publish/` names the public copy and lists `sha256  path` for files of one room. With
 *threshold* approvals, the Brainstem copies exactly those files into a separate repository with `PUBLISHED.md`, in one
 signed commit. `check-public` checks the committed tree: plain files only, each listed with its hash, nothing else.
-With `--hive`, it also checks that every public commit is signed by a member's key and that the manifest was approved.
+With `--hive`, it also checks that every public commit is signed by a current member (a former member's signature is
+named as such) and that the files, `to:` and `hive:` are exactly those of a manifest the Hive approved.
 
 ## Shared copies
 
-A shared copy is any git remote. A folder shared copy must be a bare git repository without `objects/info/alternates`,
-outside synced folders. When the Brainstem reaches it, git's known config hooks are switched off (hooks,
-`core.alternateRefsCommand`, `core.fsmonitor`, `receive.denyCurrentBranch=updateInstead`, automatic gc). Anyone who can
-write that folder can still stall it, but cannot sign as a member: devices refuse what they cannot verify.
+A shared copy is a git remote reached over ssh, https or git, or a folder; no other transport or remote helper is used.
+A folder shared copy must be a bare git repository without `objects/info/alternates`, outside synced folders. When the
+Brainstem reaches it, git's known config hooks are switched off (hooks, `core.alternateRefsCommand`, `core.fsmonitor`,
+`receive.denyCurrentBranch=updateInstead`, automatic gc). Anyone who can write that folder can still stall it, but
+cannot sign as a member: devices refuse what they cannot verify.
 
 ## Verify it yourself
 
