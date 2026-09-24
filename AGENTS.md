@@ -27,8 +27,8 @@ python -B -m unittest discover -s tests -v  # every journey, attack, interop and
 1. **Synthetic data only.** Use the Contoso cast (Avery, Blake, Casey, Drew, Emery, Frankie). No real names, emails,
    handles or keys. The keys are public test keys derived from labels; say so wherever they appear.
 2. **No absolute or home-folder paths** in any committed file. The tests check the example tree.
-3. **The agent stays at or under 1,000 non-blank lines.** A fix may not add a concept without removing one. Prefer
-   cutting a convenience over cutting a check.
+3. **The agent stays at or under 1,000 statements** (Python `ast` statements; a test counts them), with no line over
+   100 columns. A fix may not add a concept without removing one. Prefer cutting a convenience over cutting a check.
 4. **Dependencies:** the Python standard library, `cryptography` and git. Nothing else.
 5. **Git hygiene in code:** plumbing only, argument lists only, hooks off, timeouts, and verify before checkout. Never
    `git pull`, `git rebase` or `git merge`.

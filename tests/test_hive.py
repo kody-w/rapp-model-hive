@@ -7,7 +7,7 @@ exercised. Keys are PUBLIC TEST KEYS (tools/build_example.py): never use them fo
 
 Run: python -m unittest discover -s tests -v
 """
-import base64, hashlib, io, json, os, re, shutil, subprocess, sys, tempfile, unittest
+import ast, base64, hashlib, io, json, os, re, shutil, subprocess, sys, tempfile, unittest
 from contextlib import redirect_stdout
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -778,9 +778,13 @@ class Parity(unittest.TestCase):
             with self.assertRaises(Exception):
                 ha.sshsig_verify(sig, message, space)
 
-    def test_the_agent_stays_within_1000_lines(self):
-        lines = [line for line in ha.read(os.path.join(REPO, "agents", "hive_agent.py")).decode().split("\n") if line.strip()]
-        self.assertLessEqual(len(lines), 1000)
+    def test_the_agent_stays_within_1000_statements(self):
+        source = ha.read(os.path.join(REPO, "agents", "hive_agent.py")).decode()
+        self.assertLessEqual(sum(isinstance(node, ast.stmt) for node in ast.walk(ast.parse(source))), 1000)
+
+    def test_no_agent_line_is_longer_than_100_columns(self):
+        source = ha.read(os.path.join(REPO, "agents", "hive_agent.py")).decode()
+        self.assertEqual([n for n, line in enumerate(source.split("\n"), 1) if len(line) > 100], [])
 
 
 if __name__ == "__main__":

@@ -50,8 +50,9 @@ the review, and checks the commits with stock `git verify-commit` and `ssh-keyge
 
 ## How it fits the Brainstem
 
-A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), under 1,000 lines, needing only Python,
-`cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds one tool, **Hive**, and then you talk:
+A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 1,700 lines and at most 1,000
+statements, needing only Python, `cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds
+one tool, **Hive**, and then you talk:
 
 - "Start a Contoso Onboarding Hive." "I'd like to join the Hive at this address." "Let Drew in."
 - "What's open this week?" "Save" (after moving files around in Finder or Explorer). "Undo that."
