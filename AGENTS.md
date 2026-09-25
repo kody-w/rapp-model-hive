@@ -13,6 +13,10 @@ frontier draft `rapp-hive/2` (canary ring). Fictional people and devices, public
 - `vendor/` is an exact copy of the reference at the commit in `vendor/PROVENANCE.json`.
   Change it only with `tools/vendor.py`, never by hand.
 - The model is display material, not authority. `model/STORY.json` is derived labels only.
+- Never create, sign or simulate a RAPP/1 trust anchor (§13.1), a `rapp/1-registry`, or a §13
+  registry entry with authority. The Hive's own `rapp-hive/2` anchor, built from the public
+  test keys, is part of the model and is not one. `ANCHOR-REQUEST.md` asks the estate owner
+  and cites the estate's anchor and registry by public pointer only; only the owner decides.
 
 ## Guiding someone through it
 

@@ -27,6 +27,7 @@ sys.path.insert(0, str(VENDOR))
 from rapp_hive2 import hive, model, rapp1, vectors  # noqa: E402
 
 AGENT_COUNT = 0
+RAPPID = re.compile(r"@[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*:[0-9a-f]{64}(?![0-9a-f])")  # a keyed rappid (RAPP/1 §6.1), with or without "rappid:"
 
 
 def load_agent() -> types.ModuleType:
@@ -348,6 +349,84 @@ class AgentTests(unittest.TestCase):
         self.assertIn("RAPP_MODEL_HIVE", answer["error"]["next"])
 
 
+class AnchorRequestTests(unittest.TestCase):
+    """ANCHOR-REQUEST.md asks the estate owner for exactly the model's published keys. It is never a RAPP/1 trust anchor, a rapp/1-registry or a registry entry with authority, and it cites the real estate by public pointer only."""
+
+    def test_the_request_names_exactly_the_published_keys(self) -> None:
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        text = (ROOT / "ANCHOR-REQUEST.md").read_text(encoding="utf-8")
+        self.assertNotEqual(request["schema"], "rapp/1-registry")
+        self.assertNotIn("sig", request)
+        records = sorted((json.loads(path.read_bytes()) for path in (ROOT / "model" / "hive" / "identities").glob("*.json")), key=lambda record: record["rappid"])
+        entries = [{"type": "spki", "rappid": record["rappid"], "spki_der_b64": record["spki_der_b64"], "deprecated": False} for record in records]
+        self.assertEqual(request["requested"]["entries"], entries)
+        keys = {entry["rappid"]: entry["spki_der_b64"] for entry in entries}
+        frames = [rapp1.parse(path.read_bytes()) for path in sorted((ROOT / "model" / "hive" / "streams").rglob("*.json"))]
+        signed: dict[str, int] = {}
+        for frame in frames:
+            kid = rapp1.jws_kid(frame)
+            rapp1.verify_signature(frame, keys[kid], kid)
+            signed[kid] = signed.get(kid, 0) + 1
+        self.assertEqual(signed, request["self_consistency"]["frames_verified_per_kid"])
+        self.assertEqual(sum(signed.values()), request["subject"]["frames"])
+        for entry in entries:
+            self.assertIn(entry["rappid"], text)
+            self.assertIn(entry["spki_der_b64"], text)
+        optional = request["not_needed_for_rapp_check"]
+        kinds = sorted({(frame["kind"], rapp1.stream_family(frame["stream_id"])) for frame in frames if frame["kind"] != "memory.save"})
+        self.assertEqual(optional["kind"]["entries"], [{"type": "kind", "kind": kind, "family": family, "deprecated": False} for kind, family in kinds])
+        genesis = sorted(({"type": "genesis", "stream_id": frame["stream_id"], "frame_hash": frame["frame_hash"], "deprecated": False} for frame in frames if frame["seq"] == 0), key=lambda entry: entry["stream_id"])
+        self.assertEqual(optional["genesis"]["entries"], genesis)
+
+    def test_the_estate_is_cited_by_public_pointer_only(self) -> None:
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        text = (ROOT / "ANCHOR-REQUEST.md").read_text(encoding="utf-8")
+        anchor = request["trust_anchor"]
+        published = anchor["published_in"]
+        self.assertEqual((published["repository"], published["path"], published["section"]), ("https://github.com/kody-w/rapp-1", "README.md", "Trust anchor (out-of-band publication, §13.1)"))
+        self.assertEqual(RAPPID.findall(json.dumps(anchor, ensure_ascii=False)), [], "the trust anchor is a pointer, never a value")
+        self.assertEqual(anchor["same_value_at"]["json_pointer"], request["registry_of_record"]["estate_owner_json_pointer"])
+        self.assertIn(published["section"], text)
+        self.assertIn(published["url"], text)
+        tooling = request["ceremony"]["tooling"]
+        for pointer in (published, anchor["same_value_at"], tooling, *request["flags_for_estate_lead"]["flags"]):
+            self.assertRegex(pointer["commit"], r"^[0-9a-f]{40}$")
+            self.assertIn(pointer["commit"][:7], text, pointer["repository"])
+        for tool in (tooling["sign_and_verify"], tooling["gate"]):
+            self.assertIn(tool["path"], text)
+        model_rappids = {rappid for path in (ROOT / "model").rglob("*.json") for rappid in RAPPID.findall(path.read_text(encoding="utf-8"))}
+        for name, body in (("anchor-request.json", json.dumps(request, ensure_ascii=False)), ("ANCHOR-REQUEST.md", text)):
+            named = set(RAPPID.findall(body))
+            self.assertTrue(named, name)
+            self.assertEqual(named - model_rappids, set(), f"{name} names a rappid that is not one of the model's own")
+
+    def test_nothing_here_is_a_rapp1_trust_anchor_or_registry(self) -> None:
+        """AGENTS.md: no RAPP/1 trust anchor, rapp/1-registry or §13 entry with authority. The Hive's own rapp-hive/2 anchor is part of the model and is not one."""
+
+        def nodes(value: object):
+            yield value
+            for child in value.values() if isinstance(value, dict) else value if isinstance(value, list) else ():
+                yield from nodes(child)
+
+        authority = {"estate_owner", "tombstone", "re-anchor", "grail-kernel"}
+        for path in sorted(ROOT.rglob("*.json")):
+            relative = path.relative_to(ROOT)
+            if {".git", "node_modules"}.intersection(relative.parts):
+                continue
+            try:
+                value = json.loads(path.read_bytes())
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                self.assertNotEqual(value.get("schema"), "rapp/1-registry", relative.as_posix())
+            for node in nodes(value):
+                if isinstance(node, dict):
+                    self.assertNotIn(node.get("type"), authority, relative.as_posix())
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        self.assertEqual([node for node in nodes(request) if isinstance(node, dict) and "sig" in node], [], "the request is never signed")
+        self.assertTrue(json.loads((ROOT / "model" / "hive" / "HIVE.json").read_bytes())["schema"].startswith("rapp-hive/2"))
+
+
 class PublicSafetyTests(unittest.TestCase):
     """A generic scan for things that must never be published. Patterns are assembled so this file cannot match itself."""
 
@@ -377,6 +456,11 @@ class PublicSafetyTests(unittest.TestCase):
             for label, pattern in self.PATTERNS.items():
                 for match in pattern.finditer(text):
                     findings.append(f"{relative}: {label}: {match.group(0)[:40]!r}")
+        self.assertEqual(findings, [])
+
+    def test_every_rappid_is_fictional(self) -> None:
+        """A keyed rappid is a key fingerprint (RAPP/1 §13.1), so a real one is real data. Every rappid here is a fictional @contoso one."""
+        findings = sorted({f"{path.relative_to(ROOT).as_posix()}: {match.group(0).split('/')[0]}" for path in self.files() for match in RAPPID.finditer(path.read_bytes().decode("utf-8", errors="replace")) if not match.group(0).startswith("@contoso/")})
         self.assertEqual(findings, [])
 
     def test_the_model_is_labelled_synthetic_everywhere_people_look(self) -> None:
