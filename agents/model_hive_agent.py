@@ -62,6 +62,7 @@ MAX_TEXT = 256 * 1024
 MAX_VECTORS = 64 * 1024 * 1024
 ACTIONS = ("tour", "status", "verify", "cross", "migrate_demo", "conformance")
 PLAIN_FOLDERS = ("vendor", "vendor/rapp_hive2", "model", "model/hive", "model/before", "tour", "conformance")
+BEFORE_SCHEMA = "rapp-model-hive-before/1"
 
 
 class AgentError(Exception):
@@ -246,13 +247,43 @@ def cross(engine: dict[str, Any], root: Path, message: str, member: str) -> dict
     return {"outcome": "crossed", **result}
 
 
-def migrate_demo(engine: dict[str, Any], root: Path) -> dict[str, Any]:
-    """Replay the move from rapp-hive/1 on a private copy of model/before, each identity signing its own steps."""
-    hive, migrate, model, store = engine["hive"], engine["migrate"], engine["model"], engine["store"]
+def _before_house(engine: dict[str, Any], root: Path) -> dict[str, bytes]:
+    """The house before migration, exactly as tools/before.py rebuilds it: identity records from model/before, and each
+    old frame from model/hive, where it is stored once, checked against model/before/FRAMES.json by path, SHA-256 and frame hash."""
+    hive, rapp1, sign, store = engine["hive"], engine["rapp1"], engine["sign"], engine["store"]
     before, after = root / "model" / "before", root / "model" / "hive"
+    listed = rapp1.parse(store.read_inside(before, "FRAMES.json", limit=MAX_TEXT), require_canonical=False)
+    if type(listed) is not dict or set(listed) != {"schema", "note", "stored_in", "frames"} or listed["schema"] != BEFORE_SCHEMA or listed["stored_in"] != "model/hive" or type(listed["frames"]) is not list or not listed["frames"]:
+        raise rapp1.Refusal("REFUSE_SCHEMA", f"model/before/FRAMES.json is not a {BEFORE_SCHEMA} listing.")
+    house: dict[str, bytes] = {}
+    for path in hive._files(before):
+        if path.startswith("identities/"):
+            house[path] = store.read_inside(before, path, limit=hive.MAX_OBJECT_BYTES)
+        elif path != "FRAMES.json":
+            raise rapp1.Refusal("REFUSE_SCHEMA", f"model/before/{path} is unexpected: each frame is stored once, in model/hive.")
+    for entry in listed["frames"]:
+        path = entry.get("path") if type(entry) is dict else None
+        if type(entry) is not dict or set(entry) != {"path", "frame_hash", "sha256"} or type(path) is not str or not path.startswith("streams/") or path in house:
+            raise rapp1.Refusal("REFUSE_SCHEMA", f"model/before/FRAMES.json names a frame it may not: {str(path)[:80]!r}.")
+        data = store.read_inside(after, path, limit=hive.MAX_OBJECT_BYTES)
+        if rapp1.digest(data) != entry["sha256"]:
+            raise rapp1.Refusal("REFUSE_TAMPER", f"model/hive/{path} is not the frame model/before/FRAMES.json names (SHA-256 differs).")
+        frame = rapp1.parse(data)
+        rapp1.frame_integrity(frame)
+        if frame["frame_hash"] != entry["frame_hash"] or sign.frame_path(frame) != path:
+            raise rapp1.Refusal("REFUSE_TAMPER", f"model/hive/{path} is not the frame model/before/FRAMES.json names (frame hash or place differs).")
+        house[path] = data
+    return house
+
+
+def migrate_demo(engine: dict[str, Any], root: Path) -> dict[str, Any]:
+    """Replay the move from rapp-hive/1 on a private copy of the house before migration, each identity signing its own steps."""
+    hive, migrate, model, store = engine["hive"], engine["migrate"], engine["model"], engine["store"]
+    after = root / "model" / "hive"
+    house = _before_house(engine, root)
     with tempfile.TemporaryDirectory() as scratch:
         folder = Path(scratch) / "hive"
-        store.write_new_tree(folder, {path: store.read_inside(before, path, limit=hive.MAX_OBJECT_BYTES) for path in hive._files(before)})
+        store.write_new_tree(folder, house)
         carried = hive.load(folder)
         records = hive.verify_frames(carried)
         declaration = next(item.wave for item in records if item.kind == "hive.declaration")
@@ -266,11 +297,12 @@ def migrate_demo(engine: dict[str, Any], root: Path) -> dict[str, Any]:
         differing = [path for path in compared if store.read_inside(folder, path, limit=hive.MAX_OBJECT_BYTES) != store.read_inside(after, path, limit=hive.MAX_OBJECT_BYTES)]
     return {
         "plan_particle": plan["plan_particle"],
+        "old_frames_checked": sum(1 for path in house if path.startswith("streams/")),
         "steps": steps,
         "frames_compared": len(compared),
         "matches_committed_model": not differing,
         "differing": differing[:20],
-        "explanation": "The old declaration and requests stay untouched. The owner accepts a new anchor; each old member signs its own join; the steward policy (v1) mirrors the one owner, and the old onboarding request stays pending under v1's rules.",
+        "explanation": "The old declaration and requests stay untouched: each old frame is stored once, in model/hive, and model/before/FRAMES.json names it by hash. The owner accepts a new anchor; each old member signs its own join; the steward policy (v1) mirrors the one owner, and the old onboarding request stays pending under v1's rules.",
     }
 
 

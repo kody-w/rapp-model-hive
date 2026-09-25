@@ -26,6 +26,10 @@ python3 -B -m rapp_hive2 status ../model/hive
 python3 -B -m rapp_hive2 cross ../model/hive <12 hex of a message> <member slug>
 ```
 
+`model/before/` is the house before the move. Each frame is stored once, in `model/hive/`:
+`python3 -B tools/before.py <new folder>` rebuilds the old house and checks every frame
+(`tour/03-renovation.md` shows the whole replay).
+
 A RAPP Brainstem can hotload `agents/model_hive_agent.py` (actions: `tour`, `status`,
 `verify`, `cross`, `migrate_demo`, `conformance`). It runs only the engine bytes it pins.
 

@@ -3,6 +3,8 @@
 Use --check to compare the built page with its sources without writing anything.
 Only app/model-hive.html is written. The browser verifies the original carried
 bytes; STORY.json and lessons supply narration, never verification authority.
+The before copy is the house before migration, rebuilt byte for byte from
+model/before and the frames it names in model/hive (tools/before.py).
 No dependencies are downloaded and no timestamps or local paths are embedded.
 """
 
@@ -20,8 +22,11 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "vendor"))
+sys.path.insert(0, str(ROOT / "tools"))
 
 from rapp_hive2 import hive, rapp1, store  # noqa: E402
+
+import before  # noqa: E402
 
 MAX_BUNDLE_BYTES = 8 * 1024 * 1024
 THEME = """(() => {
@@ -40,12 +45,12 @@ def digest(text: str) -> str:
     return "sha256-" + b64(hashlib.sha256(text.encode("utf-8")).digest())
 
 
+def bundle_files(files: dict[str, bytes]) -> str:
+    return b64(rapp1.canonical({path: b64(data) for path, data in files.items()}, limit=MAX_BUNDLE_BYTES))
+
+
 def bundle(folder: Path) -> str:
-    files = {
-        path: b64(store.read_inside(folder, path, limit=hive.MAX_OBJECT_BYTES))
-        for path in hive._files(folder)
-    }
-    return b64(rapp1.canonical(files, limit=MAX_BUNDLE_BYTES))
+    return bundle_files({path: store.read_inside(folder, path, limit=hive.MAX_OBJECT_BYTES) for path in hive._files(folder)})
 
 
 def data(value: object) -> str:
@@ -63,7 +68,7 @@ def build() -> bytes:
     trust = {"anchor": pointer["anchor"]}
     blocks = [
         ("model-carrier", bundle(ROOT / "model" / "hive")),
-        ("before-carrier", bundle(ROOT / "model" / "before")),
+        ("before-carrier", bundle_files(before.house(ROOT))),
         ("tour-story", data(json.loads((ROOT / "model" / "STORY.json").read_text(encoding="utf-8")))),
         ("tour-lessons", data(json.loads(source("lessons.json")))),
         ("model-trust", data(trust)),

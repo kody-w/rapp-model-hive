@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,7 +24,7 @@ AGENT_FILE = ROOT / "agents" / "model_hive_agent.py"
 UTF8 = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
 sys.path.insert(0, str(VENDOR))
 
-from rapp_hive2 import hive, vectors  # noqa: E402
+from rapp_hive2 import hive, model, rapp1, vectors  # noqa: E402
 
 AGENT_COUNT = 0
 
@@ -71,6 +72,7 @@ class ModelTests(unittest.TestCase):
         done = run(sys.executable, "-B", "tools/build.py", "--check")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertTrue(json.loads(done.stdout)["ok"])
+        self.assertTrue(json.loads(done.stdout)["before_rebuilt_byte_for_byte"])
 
     def test_the_vendored_reference_is_the_pinned_commit(self) -> None:
         provenance = json.loads((VENDOR / "PROVENANCE.json").read_text(encoding="utf-8"))
@@ -111,6 +113,110 @@ class ModelTests(unittest.TestCase):
         summary = json.loads(done.stdout)["summary"]
         self.assertTrue(summary[0].startswith("Contoso Model Hive"))
         self.assertTrue(any(line.startswith("Waiting: frankie-laptop has 1 of 2") for line in summary))
+
+
+class BeforeTests(unittest.TestCase):
+    """The house before migration: each frame is stored once (RAPP/1 §7.6), yet the old house is rebuilt byte for byte."""
+
+    def test_each_frame_is_stored_once(self) -> None:
+        positions: dict[tuple[str, int], str] = {}
+        for path in sorted(ROOT.rglob("*.json")):
+            relative = path.relative_to(ROOT)
+            if {".git", "node_modules"}.intersection(relative.parts):
+                continue
+            try:
+                value = json.loads(path.read_bytes())
+            except ValueError:
+                continue
+            if isinstance(value, dict) and set(value) == rapp1.FRAME_KEYS and value.get("spec") == "rapp/1":
+                position = (value["stream_id"], value["seq"])
+                if position in positions:
+                    self.fail(f"{relative.as_posix()} repeats the frame at {positions[position]} (a RAPP/1 §7.6 duplicate position)")
+                positions[position] = relative.as_posix()
+        self.assertEqual(sorted(positions.values()), sorted(path.relative_to(ROOT).as_posix() for path in (ROOT / "model" / "hive" / "streams").rglob("*.json")))
+
+    def test_the_tour_commands_rebuild_the_house_and_the_plan(self) -> None:
+        tour = (ROOT / "tour" / "03-renovation.md").read_text(encoding="utf-8")
+        commands = tour.split("```sh\n", 1)[1].split("```", 1)[0].splitlines()
+        self.assertEqual(commands[1], "cd vendor")
+        with tempfile.TemporaryDirectory() as scratch:
+            root = copy_checkout(Path(scratch) / "checkout")
+            shutil.copytree(ROOT / "tools", root / "tools", ignore=shutil.ignore_patterns("__pycache__"))
+            first, last = ([sys.executable, *shlex.split(line)[1:]] for line in (commands[0], commands[2]))
+            done = run(*first, cwd=root)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            answer = json.loads(done.stdout)
+            self.assertEqual(answer["frames_verified"], 4)
+            folder = Path(scratch) / "contoso-before"
+            self.assertEqual({path: (folder / path).read_bytes() for path in hive._files(folder)}, model.build()["before"])
+            done = run(*last, cwd=root / "vendor")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            story = json.loads((ROOT / "model" / "STORY.json").read_text(encoding="utf-8"))
+            self.assertEqual(json.loads(done.stdout)["plan_particle"], story["plan_particle"])
+            self.assertTrue((Path(scratch) / "contoso-plan.json").is_file())
+            self.assertIn(answer["declaration"], commands[2])
+            for request in answer["legacy_requests"]:
+                self.assertIn(request, commands[2])
+
+    def test_the_agent_rebuilds_the_same_house(self) -> None:
+        agent = load_agent()
+        self.assertEqual(agent._before_house(agent.load_engine(ROOT), ROOT), model.build()["before"])
+
+    def test_a_changed_or_misplaced_frame_is_refused(self) -> None:
+        def index(root: Path) -> tuple[Path, dict]:
+            path = root / "model" / "before" / "FRAMES.json"
+            return path, json.loads(path.read_bytes())
+
+        def changed_frame(root: Path) -> None:
+            frame = root / "model" / "hive" / index(root)[1]["frames"][1]["path"]
+            frame.write_bytes(frame.read_bytes().replace(b"Photograph the site walk-through", b"Photograph the site walk-thru"))
+
+        def renamed(value: str) -> object:
+            def change(root: Path) -> None:
+                path, listed = index(root)
+                listed["frames"][0]["path"] = value
+                path.write_text(json.dumps(listed), encoding="utf-8")
+            return change
+
+        def listed_twice(root: Path) -> None:
+            path, listed = index(root)
+            listed["frames"][1] = dict(listed["frames"][0])
+            path.write_text(json.dumps(listed), encoding="utf-8")
+
+        def second_copy(root: Path) -> None:
+            relative = index(root)[1]["frames"][0]["path"]
+            (root / "model" / "before" / relative).parent.mkdir(parents=True)
+            shutil.copyfile(root / "model" / "hive" / relative, root / "model" / "before" / relative)
+
+        cases = [
+            ("a frame changed in model/hive", changed_frame, "REFUSE_TAMPER"),
+            ("a listed path outside streams/", renamed("HIVE.json"), "REFUSE_SCHEMA"),
+            ("a listed path that climbs out", renamed("streams/../HIVE.json"), "REFUSE_PORTABLE_PATH"),
+            ("a listed path naming another frame", renamed(index(ROOT)[1]["frames"][1]["path"]), "REFUSE_TAMPER"),
+            ("one frame listed twice", listed_twice, "REFUSE_SCHEMA"),
+            ("a second copy of a frame in model/before", second_copy, "REFUSE_SCHEMA"),
+        ]
+        for name, change, code in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as scratch:
+                root = copy_checkout(Path(scratch) / "checkout")
+                shutil.copytree(ROOT / "tools", root / "tools", ignore=shutil.ignore_patterns("__pycache__"))
+                change(root)
+                target = Path(scratch) / "contoso-before"
+                done = run(sys.executable, "-B", "tools/before.py", str(target), cwd=root)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertEqual(json.loads(done.stdout)["refusal"]["code"], code, done.stdout)
+                self.assertFalse(target.exists(), "a refused house is never written")
+                previous = os.environ.get("RAPP_MODEL_HIVE")
+                os.environ["RAPP_MODEL_HIVE"] = str(root)
+                try:
+                    answer = ask(load_agent().ModelHiveAgent(), action="migrate_demo")
+                finally:
+                    if previous is None:
+                        del os.environ["RAPP_MODEL_HIVE"]
+                    else:
+                        os.environ["RAPP_MODEL_HIVE"] = previous
+                self.assertFalse(answer["ok"])
+                self.assertEqual(answer["error"]["code"], code, answer)
 
 
 class AgentTests(unittest.TestCase):
@@ -156,6 +262,7 @@ class AgentTests(unittest.TestCase):
         demo = ask(agent, action="migrate_demo")
         self.assertTrue(demo["matches_committed_model"], demo["differing"])
         self.assertEqual(demo["plan_particle"], story["plan_particle"])
+        self.assertEqual(demo["old_frames_checked"], 4)
         self.assertEqual([step["signer"] for step in demo["steps"]], ["avery-laptop", "blake-phone", "casey-tablet", "avery-laptop"])
         verified = ask(agent, action="verify")
         self.assertEqual(verified["state_particle"], story["state_particle"])
