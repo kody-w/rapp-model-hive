@@ -116,8 +116,8 @@ URL.
 
 A pointer and a card each start with a line `---`, and their frontmatter ends at the next line that is exactly `---`. Every line
 between is either `key: value` or an item `  - item` under a key whose value is empty (`key:`). A key matches
-`[a-z][a-z0-9_]*` and appears once. A value has at least one character and does not start with a space. Readers refuse any
-other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
+`[a-z][a-z0-9_]*` and appears once. A value, and an item, has at least one character and neither starts nor ends with a
+space. Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
 an item list belongs. Lists are sorted by code point (as Python's `sorted` sorts them) and hold no item twice. A file has at
 most 64 KB and follows the text rules of section 5.2.
 
@@ -140,9 +140,11 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 | `superseded_by` | with `superseded` | its successor's `<owner>/<repo>`; allowed with `deprecated` or `archived`, never with `active`, never its own repo |
 
 **The LTS manifest.** Every body line of the form `<64 lowercase hex><two spaces><path>` is a manifest line. With `lts`, the
-body has 1 to 200 of them: each path in the readable set, each path once, sorted by path, no two that differ only by case
-(after dropping a leading `.rapp/`), and each hash that file's hash (section 5.2) at the LTS commit. If `.rapp/member.md` exists
-at the LTS commit, it is listed. Without `lts`, the body has no manifest line. The rest of the body is free markdown.
+body has 1 to 200 of them: each path once, sorted by path, no two that differ only by case (after dropping a leading
+`.rapp/`), and each hash that file's hash (section 5.2) at the LTS commit. Writers list only paths of the readable set, and
+list `.rapp/member.md` whenever it exists at the LTS commit; a reader refuses a listed path outside the readable set before
+any fetch (`refused`), so that station fails. Without `lts`, the body has no manifest line. The rest of the body is free
+markdown.
 
 The pointer of the worked example (section 20):
 
@@ -163,7 +165,7 @@ lifecycle: active
 The Contoso Hive reads this station at its LTS commit `d48b17f8b6`, and at `HEAD` for the newest channel.
 At the LTS commit its network files have these SHA-256 hashes (of their bytes: UTF-8 text, LF line ends, NFC):
 
-6c282510515565fd6c7f1ca09ddebfb587da14031470efb7f8a3d36b5a6fd4f5  .rapp/member.md
+ff258cda8cfa0d77b9a66e6d6d338f0cfcb90c403d2bcbae0b611e9d1848f8c2  .rapp/member.md
 dc0bca70f058bd3c3188828e59db20302fa48e7a37ae33a54273cf6087c5591d  .rapp/shared/spec-summary.md
 bbaa29331bf7e54d43b565e772e68844a75a79ad51f420480fc910401549b643  README.md
 ```
@@ -199,8 +201,8 @@ Superseded by fabrikam/weather-next. The Contoso Hive reads it at `HEAD` only.
 | `line` | yes | its line id |
 | `also_on` | no | as in the pointer |
 | `version` | no | its version: 1 to 40 of `A-Z a-z 0-9 . _ + -`, starting with a letter or digit |
-| `channel` | yes | as in the pointer |
-| `lifecycle` | yes | as in the pointer |
+| `channel` | no | as in the pointer: the channel the station says it is on |
+| `lifecycle` | no | as in the pointer: the lifecycle the station declares; no key declares none |
 | `superseded_by` | with `superseded` | as in the pointer |
 | `indexable` | no | `false` keeps it out of network indexes; `true`, or no key, lets it in |
 | `links` | no | its neighbors, each `<repo>` (of the card's own owner) or `<owner>/<repo>`; sorted |
@@ -211,6 +213,10 @@ A reader checks a card this way:
 
 - It follows the grammar. `repo` names the repository it was read from (else the finding `repo-mismatch`), and `member` is that
   repository's name.
+- The card says what the station is and who its neighbors are. What the network decides centrally, the channel a station is read
+  on and its lifecycle, lives in the pointer and the portfolio, so moving a station to `rapp1-lts` needs no commit in the
+  station. A card may state `channel`, `lifecycle` and `version` too; the generator writes only a lifecycle that is not
+  `active`, and neither `channel` nor `version`.
 - `hive` names the Hive whose root curates it. If not, the finding is `claims-other-hive`: the card is recorded, but not
   counted as a member card of that Hive.
 - Every `shares` path is in the readable set (else `share-not-readable`). At LTS, a shared path the pointer does not list is not
@@ -220,7 +226,8 @@ A reader checks a card this way:
 - With `indexable: false`, the station is kept only as `{"repo": ..., "indexable": false}` and its links are not followed, as a
   beacon's `discovery.indexable: false` is honored.
 
-The card of the worked example, as the generator writes it (section 18), with `shares` added by the station's own commit:
+The card of the worked example, as the generator writes it (section 18), with `version` and `shares` added by the station's own
+commit:
 
 ```markdown
 ---
@@ -231,8 +238,6 @@ hive_root: https://raw.githubusercontent.com/contoso/hive-public/
 what: The Contoso protocol spec.
 line: contoso-core
 version: 1.2.0
-channel: rapp1-lts
-lifecycle: active
 links:
   - installer
 shares:
@@ -268,10 +273,13 @@ portfolio uses the same ones:
 | `rapp1-lts` | the RAPP/1 long-term-support channel: read at the pointer's `lts` commit, every file checked |
 | `newest` | read at `HEAD` (or at the pointer's `newest` branch), every file unpinned; experiments live here until they graduate |
 
-A pointer's and a card's lifecycle are **copies**. The authority for a lifecycle would be a RAPP/1 `lifecycle` entry about the
-station's rappid in the estate's signed registry (rev-17 draft). Stations have no rappid yet, so no copy can be checked against
-one. A reader reports a copy as unverified, and never infers a lifecycle from a missing one. When a pointer and its station's
-card disagree, the finding is `lifecycle-differs` or `channel-differs`, and the graph reports the pointer's values, the
+A pointer's and a card's lifecycle and channel are **copies**. The authority for a lifecycle is a RAPP/1 `lifecycle` entry in the estate's
+signed registry (rev-17 draft, section 13.6), whose subject is the station's rappid or, for a station without one, its
+repository's URI, `https://github.com/<owner>/<repo>`, spelled as the estate's release manifests spell it. A move of a station
+without a rappid is a `superseded` notice naming the new repository. No such entry is signed yet, so a reader reports every
+copy as unverified, and never infers a lifecycle from a missing one. When a card states a lifecycle or a channel and its
+pointer disagrees on `lifecycle` or `superseded_by` (compared without case), the finding is `lifecycle-differs`; on `channel`,
+it is `channel-differs`. A card that states neither disagrees with nothing. The graph reports the pointer's values, the
 curator's copy.
 
 Every lifecycle is walked, and `archived` stays readable. A `superseded_by` is an edge of kind `superseded-by`, and the newest
@@ -294,7 +302,7 @@ The chain above the root is RAPP's: Constitution Article XLVII, and the seed, be
 | Member | Value |
 |---|---|
 | `hive` | the Hive id: 32 lowercase hex, equal to the `hive:` of the root's `PUBLISHED.md` |
-| `name` | a short name for people: 1 to 100 characters on one line |
+| `name` | a short name for people: 1 to 100 characters on one line, within HIVE-MD's text rules |
 | `root` | the raw base of the Hive's public copy, ending in `/` |
 | `commit` | the public copy's commit that the LTS walk reads: 40 lowercase hex |
 | `published_sha256` | the HIVE-MD hash of `PUBLISHED.md` at that commit: 64 lowercase hex |
@@ -310,7 +318,7 @@ An entry with any other member, or with a member of the wrong shape, is skipped 
       "name": "contoso-hive",
       "root": "https://raw.githubusercontent.com/contoso/hive-public/",
       "commit": "ca1e0d63f4f02d0e380ec3471a7832625c336caf",
-      "published_sha256": "1517515c3515b7a5cce6fa2dbec27f59c9de4ca7e09ffb672ece56c73dfcb94a"
+      "published_sha256": "9ddc1ab74f7e054ef30becdc4abc71ba715aaf53d66b7abeb939fb3ca3877851"
     }
   ]
 }
@@ -361,7 +369,8 @@ commit without a `published_sha256` is still read, and the finding `root-not-anc
 
 ### 11.4 Checking the walk against a release manifest (RAPP/1 rev-17 draft)
 
-The rev-17 draft of RAPP/1 (section 13.5) pins every component of one immutable release in a **release manifest**, named by its
+The rev-17 draft of RAPP/1 (on `kody-w/rapp-1`, branch `experimental/rapp1-core-rev17`; section 13.5) pins every component of
+one immutable release in a **release manifest**, named by its
 `manifest_hash` in an owner-signed `release-pin` entry of the estate's registry. In its words, seeds, beacons, estate catalogs,
 Hive indexes and member pointers are **locators**: they may say where to look, content is verified only when a manifest pins
 it, and a locator that disagrees with the manifest is a drift finding, never a second opinion.
@@ -374,13 +383,17 @@ So a resolver may take a release manifest (`--release-manifest`, with the `manif
    `manifest_hash = H("rapp/1:particle", manifest)`, and compares it with the one given (else `mismatch`).
 2. For each component whose `repository` is `https://github.com/<owner>/<repo>`, it fetches every pinned file at
    `<release raw prefix><owner>/<repo>/<commit>/<path>` (the prefix is `https://raw.githubusercontent.com/` unless given) and
-   checks its length and SHA-256. A file of a component elsewhere is `refused`. One failed file fails the whole release, and then
-   none of it is kept.
+   checks its length and SHA-256. A file of a component elsewhere is `refused`. When every file matched, each door-of-record
+   binding is checked: the `identity_path` file is a JSON object whose `rappid` is the component's and whose `schema`, when
+   present, is `rapp/1`. One failed file or binding fails the whole release, and then none of it is kept. A release that pins
+   more than 5,000 files is `refused` before any fetch. Without `--manifest-hash`, the manifest is trusted on first read
+   (finding `release-not-anchored`).
 3. It cross-checks the locators. A curated station on `rapp1-lts` and the component with the same repository must agree on the
-   commit and on the hash of every path both list (else `release-drift`). A curated LTS station without a component is
-   `release-missing`. A component that binds a door of record (a `rappid`) must match the station card's `rappid` (else
-   `door-of-record-drift`). A component whose repository is a Hive root's must pin the commit the walk read that root at (else
-   `release-drift`).
+   commit and on the hash of every path both list (else `release-drift`). A curated LTS station of a Hive whose root the
+   manifest pins, with no component, is `release-missing`. A component that binds a door of record (a `rappid`) must match the
+   card's `rappid` of every station read with that repository, where no card counts as no rappid (else `door-of-record-drift`).
+   A component whose repository is a Hive root's must pin the commit an LTS walk read that root at (else `release-drift`); a
+   newest walk compares stations by their pointers' `lts`, and roots not at all.
 
 These are steps 2 and 3 of the section 13.5 snapshot. Step 1, verifying the owner-signed registry and selecting the release pin,
 is left to RAPP/1's reference implementation; this resolver checks no signature. So a checked release is still
@@ -397,7 +410,7 @@ is left to RAPP/1's reference implementation; this resolver checks no signature.
 | `missing` | the server answered 404 |
 | `unreachable` | the retries ran out, the server gave another error answer (not 404), or offline and not in the cache |
 | `refused` | outside the transport policy, over its size limit, a redirect, not in the readable set, or against the text rules |
-| `unpinned` | read at a moving ref (newest); its hash is recorded only |
+| `unpinned` | read at a moving ref (newest), or at a pinned commit that nothing anchors; its hash is recorded only |
 
 **Per station**, `integrity` is `verified` (every listed file verified), `failed` (any `mismatch`, `missing` or `refused`),
 `unreachable`, `not-pinned` (no `lts`, so not read in LTS), or `unpinned` (newest).
@@ -411,7 +424,8 @@ signed RAPP/1 section 13 registry anchors any of it yet. Integrity, the hash cha
 ## 13. Bounds, politeness and the transport policy
 
 - At most 1 MiB per station or root file and 8 MiB per release file, refused before more than the limit and one byte is read;
-  200 files per station; 5,000 files per Hive root listing and per release; 1,000 stations; 3 hops; 15 seconds per request.
+  200 files per station; 5,000 files per Hive root listing and per release (a larger one is refused before any fetch); 1,000
+  stations; 3 hops; 15 seconds per request.
 - At most 4 requests at once (at most 8 by choice) and 8 requests a second in all.
 - A 429, 500, 502, 503 or 504, a timeout or a reset connection is retried, up to 4 attempts in all, with backoff and jitter
   (0.5 s, 1 s, 2 s), honoring `Retry-After` up to 60 s. A 404 is final (`missing`); any other answer is final.
@@ -461,11 +475,11 @@ Keys sorted, UTF-8, a two-space indent and one final newline. Lists are sorted t
 | `authenticity` | `{"state": "unverified", "reason": "estate-not-anchored"}` |
 | `started_at` | `{"stage", "url"}`: `seed`, `beacon`, `estate` or `hive-root`, and its URL |
 | `chain` | one entry per stage and operator: `{"stage", "url", "status", "sha256", "pinned", "detail"}` |
-| `release` | `null`, or the release manifest checked (section 11.4): `{"url", "sha256", "manifest_hash", "expected_manifest_hash", "release_scope", "release", "components", "files", "verified", "state", "detail"}`, where `state` is `checked`, `failed`, `invalid`, `mismatch`, `missing`, `unreachable` or `refused` |
+| `release` | `null`, or the release manifest checked (section 11.4): `{"url", "sha256", "manifest_hash", "expected_manifest_hash", "release_scope", "release", "components", "files", "verified", "state", "detail"}`, where `components`, `files` and `verified` are counts and `state` is `checked`, `failed`, `invalid`, `mismatch`, `missing`, `unreachable` or `refused` |
 | `hives` | one per Hive root read: `{"hive", "name", "root", "ref", "published_sha256", "stations", "former"}` |
 | `stations` | one per station (below), or `{"repo", "indexable": false}` for a station that opted out |
 | `edges` | `{"from", "to", "kind"}`, where `kind` is `link` or `superseded-by` |
-| `uncurated` | `{"repo", "linked_from", "fetched"}` for each linked repository that no pointer curates |
+| `uncurated` | `{"repo", "linked_from", "fetched"}` for each repository linked or named as a successor that no pointer curates |
 | `findings` | the walk's findings, `{"where", "code", "detail"}` (section 21) |
 | `totals` | `{"hives", "stations", "verified", "failed", "not_pinned", "unpinned", "uncurated", "files"}` |
 | `generated_at` | the RAPP/1 section 7.4 UTC form, `YYYY-MM-DDTHH:MM:SS.mmmZ` |
@@ -475,7 +489,9 @@ A station has `station`, `repo`, `hive`, `curated`, `line`, `also_on`, `channel`
 `integrity`, `files` (each `{"path", "sha256", "state"}`, sorted by path), `card` (`{"present", "what", "version",
 "channel", "lifecycle", "superseded_by", "indexable", "links", "shares", "rappid", "claims_hive"}`), `release` (`null`, or
 `{"component", "agrees"}`) and `findings`. For a curated station, `line`, `also_on`, `channel`, `lifecycle` and
-`superseded_by` are the pointer's; for an uncurated one, the card's.
+`superseded_by` are the pointer's; for an uncurated one, the card's (`null` when the card states none). With a manifest whose state is `checked` or `failed`,
+every station has `release: {"component": <id or null>, "agrees": <bool>}`, where `agrees` is `false` exactly when the
+station has a `release-drift`, `release-missing` or `door-of-record-drift` finding; otherwise `release` is `null`.
 
 The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 2026-09-25T00:00:00.000Z`:
 
@@ -506,7 +522,7 @@ The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 
     {
       "detail": "1 Hive(s) listed",
       "pinned": true,
-      "sha256": "32930af595ccc9f250e3a868f7bbf7223a6e5aa7ac7974583f0f574941e4f72e",
+      "sha256": "a62f33377699ad7be4c3616277bc8ee3d90a1ff6fcb1707f10db13d96ae03439",
       "stage": "estate",
       "status": "ok",
       "url": "https://raw.githubusercontent.com/contoso/rapp-estate/0d5a9fc1eee26eb2b85fbadff6bfdf2d4a2fb6d0/estate.json"
@@ -514,7 +530,7 @@ The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 
     {
       "detail": "Hive c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e: 2 file(s) listed, 1 station pointer(s)",
       "pinned": true,
-      "sha256": "1517515c3515b7a5cce6fa2dbec27f59c9de4ca7e09ffb672ece56c73dfcb94a",
+      "sha256": "9ddc1ab74f7e054ef30becdc4abc71ba715aaf53d66b7abeb939fb3ca3877851",
       "stage": "hive-root",
       "status": "ok",
       "url": "https://raw.githubusercontent.com/contoso/hive-public/ca1e0d63f4f02d0e380ec3471a7832625c336caf/PUBLISHED.md"
@@ -529,13 +545,13 @@ The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 
   ],
   "findings": [],
   "generated_at": "2026-09-25T00:00:00.000Z",
-  "graph_sha256": "49f64f7fa518e66e7c003cd43eed7d553265a6e2aa2ffe55862738225391d37b",
+  "graph_sha256": "573d3e72d6735c79103f656ce68ad3160ca48a32ea7e87a22c0e82b5f29babd6",
   "hives": [
     {
       "former": [],
       "hive": "c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e",
       "name": "contoso-hive",
-      "published_sha256": "1517515c3515b7a5cce6fa2dbec27f59c9de4ca7e09ffb672ece56c73dfcb94a",
+      "published_sha256": "9ddc1ab74f7e054ef30becdc4abc71ba715aaf53d66b7abeb939fb3ca3877851",
       "ref": "ca1e0d63f4f02d0e380ec3471a7832625c336caf",
       "root": "https://raw.githubusercontent.com/contoso/hive-public/",
       "stations": 1
@@ -552,10 +568,10 @@ The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 
     {
       "also_on": [],
       "card": {
-        "channel": "rapp1-lts",
+        "channel": null,
         "claims_hive": true,
         "indexable": true,
-        "lifecycle": "active",
+        "lifecycle": null,
         "links": [
           "contoso/installer"
         ],
@@ -573,7 +589,7 @@ The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 
       "files": [
         {
           "path": ".rapp/member.md",
-          "sha256": "6c282510515565fd6c7f1ca09ddebfb587da14031470efb7f8a3d36b5a6fd4f5",
+          "sha256": "ff258cda8cfa0d77b9a66e6d6d338f0cfcb90c403d2bcbae0b611e9d1848f8c2",
           "state": "verified"
         },
         {
@@ -641,8 +657,9 @@ DIR/release/<component id>/<path>          every file it pins, only when every o
 `SNAPSHOT.json` has `schema`, `mode`, `accepted` (`false`), `authenticity`, `chain`, `release` (as in the graph), `files` (each
 `{"path", "url", "sha256", "state", "anchor"}`, where `anchor` names what pinned it: `estate.json hives[] published_sha256`
 or `--hive-published-sha256` for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a
-station's files, `release manifest` for a release's files, or `null` when nothing pinned it), `skipped` (files not written,
-and why), `graph_sha256` and `generated_at`.
+station's files, `release manifest` for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`, without
+one), or `null` when nothing pinned it), `skipped` (files not written, and why; a release that did not check out adds one entry
+`release`), `graph_sha256` and `generated_at`.
 
 ## 17. Pulses
 
@@ -650,7 +667,8 @@ A walk can be announced as a RAPP/1 section 7 frame of kind `body.pulse`. A stre
 7.6), so a resolver offers two commands:
 
 - `pulse-payload --graph FILE` prints the walk's fragment, for the stream's owner to put in the owner's own pulse:
-  `{"graph_sha256", "mode", "hives": [{"hive", "ref", "published_sha256"}], "totals"}`, as canonical JSON.
+  `{"graph_sha256", "mode", "hives": [{"hive", "ref", "published_sha256"}], "totals"}`, with `hives` sorted by `hive`, `ref`
+  and `published_sha256`, as canonical JSON and one newline.
 - `pulse --graph FILE --stream-rappid RAPPID [--prev FRAME.json] --out FRAME.json` writes a frame, for a stream the caller owns:
   the next `seq` and `prev` after `--prev` (the previous frame's JSON), `utc` set to the graph's `generated_at`, `payload` set to
   the fragment above, and `prev_wave` and `sig` `null`. The file is the frame's canonical JSON and nothing else.
@@ -683,15 +701,17 @@ Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, 
 - The inventory, `family.json`: a list of `{"repo", "family", "also_on", "description", "default_branch", "empty"}`, with
   `archived` when it is known.
 - `--lts-pins FILE`: either a RAPP/1 release manifest (`rapp/1-release-manifest`), in which each component whose repository is
-  `https://github.com/<owner>/<repo>` pins that repository's LTS commit; or a JSON object mapping `<owner>/<repo>` or `<repo>` to
-  a 40-hex commit or to `{"commit": ...}`, at the top level or under `pins`.
+  `https://github.com/<owner>/<repo>` pins that repository's LTS commit (it is checked as a value, so it may be pretty-printed);
+  or a JSON object mapping `<owner>/<repo>` or `<repo>` to a 40-hex commit or to `{"commit": ...}`, at the top level or under
+  `pins`.
 
 **Fields.** `line` is the portfolio's `family`, and the card's body shows the line's name. `what` is the inventory's
 `description`, cut to the text rules and to 200 characters on a word boundary (or `A <line name> repository on the RAPP/1
-network.`). `version` is the first line of the repository's `VERSION`, when it fits the grammar. `channel` is `rapp1-lts` exactly
-when an LTS pin is given. `lifecycle` and `superseded_by` are the portfolio's, else `archived` when the inventory says archived,
-else `active`; nothing is inferred from other files. `links` is `links_to` without the repository itself and without names of
-instruction files. `rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else.
+network.`). `lifecycle` and `superseded_by` are the portfolio's, else `archived` when the inventory says archived, else
+`active`; nothing is inferred from other files. A card gets them only when the lifecycle is not `active`; a pointer always gets
+them, with `channel`, which is `rapp1-lts` exactly when an LTS pin is given. `links` is `links_to` without the repository itself
+and without names of instruction files. `rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else.
+The generator writes no `version` and no card `channel`: they would go stale in the station's own files.
 
 **Commands.**
 
@@ -700,14 +720,16 @@ instruction files. `rappid` mirrors the `rappid` of a valid `rappid.json` that e
 - `pointers` writes `<out>/members/<station>.md` for each repository in the portfolio, and `<out>/pointers.json`
   (`rapp-hive-pointers/1`). For a pinned repository it lists each readable file at the LTS commit, read with
   `git show <commit>:<path>` from a local clone, with its hash; a file that is not normalized text is left out and named. When
-  the pins come from a release manifest, a file both list must have the same hash, else the pointer is refused. A repository
-  without a pin gets `channel: newest` and no `lts`.
+  the pins come from a release manifest, a file both list must have the same hash, else the pointer is refused, and
+  `pointers.json` records its `release_manifest_hash`. A repository without a pin gets `channel: newest`, no `lts`, and the
+  body `# <station>`, then `[Superseded by <repo>. | Deprecated[; its successor is <repo>]. | Archived[; its successor is
+  <repo>]. ]The <hive name> reads it at `HEAD` only.`, as the second example of section 7.
 - `plan` writes `rapp-hive-card-plan/1`: `auto` or `hold` for each repository, with the reasons. It holds a repository that pins
   its tracked path set (a tracked file with `tracked_path_count`, `tracked_path_set_sha256`, `path_set_sha256` or
   `tracked_paths`, or a `MANIFEST*` or `*INVENTORY*.json` file that lists at least half of the tracked paths), that has anything
   in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs, that is empty, that is
-  named like an instruction file, that has no local clone, whose portfolio `channel` disagrees with its pin, or whose generated
-  card would not validate. `card`, `cards` and `pointers` refuse a repository whose portfolio `channel` disagrees with its pin.
+  named like an instruction file, that has no local clone, or whose generated card would not validate. `pointers` refuses a
+  repository whose portfolio `channel` disagrees with its pin (`rapp1-lts` without a pin, or `newest` with one).
 
 The generated card's body, where `[...]` parts appear only when they apply:
 
@@ -751,7 +773,7 @@ manifest: 17ab487d8662754746d51f8b08073d7fc3b2a4e8103e83fda6340d23f529ad4e
 hive: c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e
 ---
 
-184a74772030d1f2ecc33a08bf9ebd821c392262f7b8d4a0a02c6ac62f340f30  members/protocol.md
+e25afc4979a59be6efaf3a126296df4d4b8251d05b7a49ca9af75f2b5877a497  members/protocol.md
 b6b3f5354ec37afb6f605a8dbe920d8632a6cc9484c1cefd4c84e28580a4f24d  portfolio/lines.md
 ```
 
@@ -797,7 +819,7 @@ the one in section 15.
 | `instruction-file-name` | a pointer or a link names a repository named like an AI instruction file |
 | `outside-policy` | a URL the transport policy does not allow: never fetched |
 | `pointer-invalid` | a listed pointer does not follow section 7 |
-| `duplicate-station` | a second pointer for a repository that already has one |
+| `duplicate-station` | a second pointer for a repository that already has one (a listing with two names that differ only by case is refused whole) |
 | `station-name` | a pointer's name is not its repository's station name (section 3) |
 | `max-stations` | beyond the station limit: not walked |
 | `mismatch`, `missing`, `refused`, `unreachable` | a file in that state (section 12) |
@@ -810,6 +832,7 @@ the one in section 15.
 | `rappid-mismatch` | a card's `rappid` differs from its `rappid.json` |
 | `lifecycle-differs`, `channel-differs` | a pointer and its station's card disagree |
 | `integrity-failed` | a station that opted out of indexes failed a check (the details stay out of the graph) |
+| `release-not-anchored` | a release manifest checked without `--manifest-hash`: trusted on first read |
 | `release-drift` | a pointer or a Hive root disagrees with the release manifest |
 | `release-missing` | a curated LTS station that the release manifest does not pin |
 | `door-of-record-drift` | a release component's door of record disagrees with the station's card |

@@ -77,10 +77,12 @@ The shared copy is a git remote (ssh, https or git) or a folder. A folder shared
 git runs that copy's side of every push and fetch, so the Brainstem switches off git's known config hooks there. Anyone
 who can write the folder can still stall it, but cannot sign as a member.
 
-A reference can also be a Hive's public copy on the web, pinned at one commit (`reference url=`). The Brainstem reads its
-PUBLISHED.md and only the files it lists, each checked against its hash, into a cache on this device. For a Hive root
-whose stations keep their own member spaces, `resolve` reads each station at the commit its pointer pins, the same way.
-Nothing is committed until a member brings a piece in. See [Remote member spaces](HIVE-MD.md#remote-member-spaces).
+A reference can also be a Hive's public copy on the web, pinned at one commit (`reference url=`, and `sha256=` to anchor
+its PUBLISHED.md). The Brainstem reads its PUBLISHED.md and only the files it lists, each checked against its hash, into a
+cache on this device. For a Hive root whose stations keep their own member spaces, `resolve` reads each station at the
+commit its pointer pins, the same way. Nothing is committed until a member brings a piece in. See
+[Remote member spaces](HIVE-MD.md#remote-member-spaces), and [DISTRIBUTED-HIVE.md](DISTRIBUTED-HIVE.md) for the whole
+network: a network of repositories kept as one Hive.
 
 The same file is the checker, with no Brainstem needed:
 

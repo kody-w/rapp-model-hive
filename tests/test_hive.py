@@ -1344,7 +1344,7 @@ def contoso_network(folder, raw):
 
     def card(name, what, shares=()):
         return (f"---\nmember: {name}\nrepo: contoso/{name}\nhive: {hive}\nhive_root: {raw}contoso/hive-public/\nwhat: {what}\n"
-                "line: contoso-core\nchannel: lts\nlifecycle: active\n" + ("shares:\n" + "".join(f"  - {p}\n" for p in shares) if shares else "")
+                "line: contoso-core\nchannel: rapp1-lts\nlifecycle: active\n" + ("shares:\n" + "".join(f"  - {p}\n" for p in shares) if shares else "")
                 + f"---\n\n# {name} on the Contoso network\n\n{what}\n")
     stations = {
         "protocol": {"README.md": "# Protocol\n\nThe one spec.\n", ".rapp/member.md": card("protocol", "The Contoso protocol spec."),
@@ -1365,11 +1365,11 @@ def contoso_network(folder, raw):
         manifest = "".join(f"{ha.sha(ha.norm(t.encode()))}  {p}\n" for p, t in sorted(files.items()))
         pins[name] = (f"{raw}contoso/{name}/", lts)
         pointers[name] = (f"---\nstation: {name}\nrepo: contoso/{name}\nraw: {raw}contoso/{name}/\nlts: {lts}\nnewest: HEAD\n"
-                          f"line: contoso-core\nchannel: lts\nlifecycle: active\n---\n\n# {name}\n\nRead at its LTS commit `{lts[:10]}`.\n\n{manifest}")
+                          f"line: contoso-core\nchannel: rapp1-lts\nlifecycle: active\n---\n\n# {name}\n\nRead at its LTS commit `{lts[:10]}`.\n\n{manifest}")
     write("tampered", pins["tampered"][1], ".rapp/member.md", card("tampered", "Changed after it was pinned!"))
     pointers["notes"] = (f"---\nstation: notes\nrepo: contoso/notes\nraw: {raw}contoso/notes/\nnewest: HEAD\nline: contoso-docs\n"
                          "also_on:\n  - contoso-core\nchannel: newest\nlifecycle: active\n---\n\n# notes\n\nRead at HEAD only.\n")
-    pointers["away"] = pointers["installer"].replace(f"raw: {raw}contoso/installer/", "raw: https://contoso.example/installer/").replace(
+    pointers["away"] = pointers["installer"].replace(f"raw: {raw}contoso/installer/", "raw: https://contoso.example/contoso/installer/").replace(
         "station: installer", "station: away")
     pointers["broken"] = pointers["installer"].replace("station: installer", "station: broken\nsecret: yes")
     pointers["agents"] = pointers["agent-index"].replace("station: agent-index", "station: agents")  # an instruction file's name
@@ -1555,12 +1555,23 @@ class RemoteMembers(HiveTest):
         with redirect_stdout(out):
             self.assertEqual(ha.main(["check", self.A.hive]), 0, out.getvalue())  # every commit passes the Hive's rules
 
-    def test_the_examples_in_hive_md_follow_the_rules(self):
-        section = ha.read(os.path.join(REPO, "HIVE-MD.md")).decode().split("## Remote member spaces\n")[1].split("\n## ")[0]
-        pointer, card = re.findall(r"```markdown\n(.*?)```", section, re.S)
+    def test_the_examples_in_distributed_hive_md_follow_the_rules(self):
+        contract = ha.read(os.path.join(REPO, "DISTRIBUTED-HIVE.md")).decode()
+        blocks = re.findall(r"```(?:markdown|json)\n(.*?)```", contract, re.S)
+        pointer, moved, card = blocks[0], blocks[1], blocks[2]
         meta, files, refused = ha.pointer("members/protocol.md", pointer, "https://raw.githubusercontent.com/")
-        self.assertEqual((meta["station"], refused), ("protocol", {}))
-        self.assertEqual(sorted(files), ["stations/protocol/README.md", "stations/protocol/member.md"])
+        self.assertEqual((meta["station"], meta["channel"], refused), ("protocol", "rapp1-lts", {}))
+        self.assertEqual(sorted(files), ["stations/protocol/README.md", "stations/protocol/member.md",
+                                         "stations/protocol/shared/spec-summary.md"])
+        manifest = dict(ha.listing(pointer))
+        self.assertEqual(manifest[".rapp/member.md"], hashlib.sha256(card.encode()).hexdigest())  # the worked example hashes as shown
+        self.assertEqual(manifest["README.md"], hashlib.sha256(blocks[-2].encode()).hexdigest())
+        self.assertEqual(manifest[".rapp/shared/spec-summary.md"], hashlib.sha256(blocks[-1].encode()).hexdigest())
+        published = next(b for b in blocks if b.startswith("---\nmanifest: "))
+        self.assertEqual(dict(ha.listing(published))["members/protocol.md"], hashlib.sha256(pointer.encode()).hexdigest())
+        self.assertIn(hashlib.sha256(published.encode()).hexdigest(), blocks[3])  # estate.json hives[] pins PUBLISHED.md
+        meta, files, refused = ha.pointer("members/fabrikam.weather.md", moved, "https://raw.githubusercontent.com/")
+        self.assertEqual((meta["lifecycle"], meta["superseded_by"], files), ("superseded", "fabrikam/weather-next", {}))
         self.assertEqual(ha.hive_md(*ha.front(card)), card)  # only `key: value` and `  - item` lines
         self.assertEqual(ha.front(card)[0]["hive"], "c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e")
         self.assertIn("its raw address is refused", ha.pointer("members/protocol.md", pointer, "https://contoso.example/"))
@@ -1571,11 +1582,68 @@ class RemoteMembers(HiveTest):
                        pointer.replace("line: contoso-core\n", ""),  # a missing key
                        pointer.replace("line: contoso-core\n", "line: contoso-core\nalso_on: contoso-docs\n"),  # not a list
                        pointer.replace("line: contoso-core\n", "line: contoso-core\nalso_on:\n  - contoso-core\n"),  # its own line
-                       pointer.replace("channel: lts", "channel: newest"),  # lts only with channel lts
+                       pointer.replace("channel: rapp1-lts", "channel: newest"),  # lts only with channel rapp1-lts
+                       pointer.replace("channel: rapp1-lts", "channel: lts"),  # the old word
+                       pointer.replace("lifecycle: active", "lifecycle: frozen"),  # not a lifecycle word
+                       pointer.replace("lifecycle: active", "lifecycle: superseded"),  # superseded names its successor
+                       pointer.replace("lifecycle: active", "lifecycle: active\nsuperseded_by: contoso/protocol-2"),  # active names none
+                       pointer.replace("lifecycle: active", "lifecycle: superseded\nsuperseded_by: Contoso/Protocol"),  # never itself
+                       pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: next"),  # owner/repo
+                       pointer.replace("raw: https://raw.githubusercontent.com/contoso/protocol/",
+                                       "raw: https://raw.githubusercontent.com/contoso/elsewhere/"),  # raw ends in its repo
+                       pointer.replace("newest: HEAD", "newest: .hidden"), pointer.replace("newest: HEAD", "newest: a..b"),
+                       pointer.replace("newest: HEAD", "newest: main.lock"),  # not a branch git accepts
                        "\n".join(lines[:-3] + [lines[-2], lines[-3], ""]),  # the manifest out of order
                        pointer.replace("station: protocol", "station: installer")):  # not its file's name
             with self.subTest(broken=broken):
                 self.assertIn("not a station pointer", ha.pointer("members/protocol.md", broken, "https://raw.githubusercontent.com/"))
+        for kept in (pointer.replace("lifecycle: active", "lifecycle: deprecated"),
+                     pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: contoso/protocol-2")):
+            self.assertIsInstance(ha.pointer("members/protocol.md", kept, "https://raw.githubusercontent.com/"), tuple)
+        long_name = "p" * 62
+        self.assertIn("not a station pointer", ha.pointer(f"members/{long_name}.md", pointer.replace("station: protocol", f"station: {long_name}"),
+                                                          "https://raw.githubusercontent.com/"))  # at most 61 characters
+
+    def test_a_station_file_is_kept_only_when_its_bytes_match(self):
+        web = tempfile.mkdtemp(prefix="hive-raw-")
+        self.addCleanup(be.rmtree, web)
+        raw, hive = Raw(web), "c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e"
+        try:
+            lts, text = commit_id("contoso/accents"), "# Cafe\u0301\n\nDecomposed, so not in NFC.\n"  # normalizes to other bytes
+            ha.put(os.path.join(web, "contoso", "accents", lts, "README.md"), text.encode())
+            listed = ha.sha(ha.norm(text.encode()))  # the hash of its normalized text, not of its bytes
+            page = (f"---\nstation: accents\nrepo: contoso/accents\nraw: {raw.base}contoso/accents/\nlts: {lts}\nnewest: HEAD\n"
+                    f"line: contoso-core\nchannel: rapp1-lts\nlifecycle: active\n---\n\n{listed}  README.md\n")
+            base = public_copy(web, raw.base, "accents-public", {"members/accents.md": page})
+            self.A.do(action="reference", label="accents", url=base)
+            reply = self.A.say(action="resolve", ref="accents")
+            self.assertIn("problem: stations/accents/README.md: it does not match the hash its listing gives (by its bytes", reply)
+            self.assertIn("verified (0): none", reply)
+        finally:
+            raw.stop()
+
+    def test_a_root_pinned_with_sha256_is_read_only_when_its_published_md_matches(self):
+        published = ha.read(os.path.join(self.web, "contoso", "hive-public", commit_id("contoso/hive-public"), "PUBLISHED.md"))
+        good, bad = ha.sha(ha.norm(published)), "0" * 64
+        for anchor, words in (("ABC", "64 lowercase hex"), (good.upper(), "64 lowercase hex")):
+            self.not_done(self.A.say(action="reference", label="contoso", url=self.root_url, sha256=anchor), words)
+        folder = os.path.realpath(os.path.join(self.root, "vault"))
+        ha.put(os.path.join(folder, "a.md"), b"# a\n")
+        self.not_done(self.A.say(action="reference", label="vault", path=folder, sha256=good), "sha256= goes with url=")
+        self.assertIn(f"which must hash to {good}", self.A.say(action="reference", label="contoso", url=self.root_url, sha256=good))
+        self.A.do(action="reference", label="contoso", url=self.root_url, sha256=good)
+        self.assertEqual(ha.load(ha.Hive(self.A.home, be.HIVE).st("references.json")), {"contoso": f"{self.root_url}#{good}"})
+        reply = self.A.say(action="resolve", ref="contoso")
+        self.assertIn(" (4): agent-index, installer, protocol, rollout\n", reply)
+        self.assertIn("the root: anchored by the sha256= it was pinned with.", reply)
+        self.assertIn(f"public copy at {self.root_url}: only", reply)  # the address is shown without the anchor
+        self.A.do(action="reference", label="plain", url=self.root_url)
+        self.assertIn("the root: trusted on first read", self.A.say(action="resolve", ref="plain"))
+        start = len(self.raw.requests)
+        self.A.do(action="reference", label="wrong", url=self.root_url, sha256=bad)
+        self.not_done(self.A.say(action="list", ref="wrong"), "does not match the sha256= it was pinned with")
+        self.assertEqual(self.asked(start), [f"/contoso/hive-public/{commit_id('contoso/hive-public')}/PUBLISHED.md"])  # nothing else
+        self.assertFalse(os.path.exists(os.path.join(self.cache("wrong"), "members")))
 
     def test_a_second_resolve_reads_the_cache_and_offline_keeps_it(self):
         web = tempfile.mkdtemp(prefix="hive-raw-")
