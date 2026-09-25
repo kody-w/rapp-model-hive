@@ -116,8 +116,8 @@ URL.
 
 A pointer and a card each start with a line `---`, and their frontmatter ends at the next line that is exactly `---`. Every line
 between is either `key: value` or an item `  - item` under a key whose value is empty (`key:`). A key matches
-`[a-z][a-z0-9_]*` and appears once. A value, and an item, has at least one character and neither starts nor ends with a
-space. Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
+`[a-z][a-z0-9_]*` and appears once. A value, and an item, has at least one character and neither starts nor ends with
+whitespace (any character Python's `str.strip()` removes). Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
 an item list belongs. Lists are sorted by code point (as Python's `sorted` sorts them) and hold no item twice. A file has at
 most 64 KB and follows the text rules of section 5.2.
 
@@ -203,7 +203,7 @@ Superseded by fabrikam/weather-next. The Contoso Hive reads it at `HEAD` only.
 | `version` | no | its version: 1 to 40 of `A-Z a-z 0-9 . _ + -`, starting with a letter or digit |
 | `channel` | no | as in the pointer: the channel the station says it is on |
 | `lifecycle` | no | as in the pointer: the lifecycle the station declares; no key declares none |
-| `superseded_by` | with `superseded` | as in the pointer |
+| `superseded_by` | with `superseded` | as in the pointer, and never without a `lifecycle` that allows it |
 | `indexable` | no | `false` keeps it out of network indexes; `true`, or no key, lets it in |
 | `links` | no | its neighbors, each `<repo>` (of the card's own owner) or `<owner>/<repo>`; sorted |
 | `shares` | no | the paths it shares, each a `.rapp/shared/...` path of the readable set; sorted |
@@ -277,10 +277,10 @@ A pointer's and a card's lifecycle and channel are **copies**. The authority for
 signed registry (rev-17 draft, section 13.6), whose subject is the station's rappid or, for a station without one, its
 repository's URI, `https://github.com/<owner>/<repo>`, spelled as the estate's release manifests spell it. A move of a station
 without a rappid is a `superseded` notice naming the new repository. No such entry is signed yet, so a reader reports every
-copy as unverified, and never infers a lifecycle from a missing one. When a card states a lifecycle or a channel and its
-pointer disagrees on `lifecycle` or `superseded_by` (compared without case), the finding is `lifecycle-differs`; on `channel`,
-it is `channel-differs`. A card that states neither disagrees with nothing. The graph reports the pointer's values, the
-curator's copy.
+copy as unverified, and never infers a lifecycle from a missing one. When a card states a `lifecycle` and its pointer
+disagrees on `lifecycle` or `superseded_by` (`superseded_by` compared without case), the finding is `lifecycle-differs`; when a
+card states a `channel` and its pointer disagrees, it is `channel-differs`. A key the card does not state disagrees with
+nothing. The graph reports the pointer's values, the curator's copy.
 
 Every lifecycle is walked, and `archived` stays readable. A `superseded_by` is an edge of kind `superseded-by`, and the newest
 walk follows it like a link.
@@ -377,10 +377,11 @@ it, and a locator that disagrees with the manifest is a drift finding, never a s
 
 So a resolver may take a release manifest (`--release-manifest`, with the `manifest_hash` its release pin names), and then:
 
-1. It requires the manifest's bytes to be exactly its RAPP/1 canonical JSON, checks its form by the section 13.5 rules that need
-   no registry (the members, the `release` name, `id` and `kind` grammar and order, commits, tags, the section 9.1 path grammar
-   and its collisions, digests, sizes, and at most one door-of-record binding per rappid), computes
-   `manifest_hash = H("rapp/1:particle", manifest)`, and compares it with the one given (else `mismatch`).
+1. It requires the manifest's bytes to be exactly its RAPP/1 canonical JSON, computes `manifest_hash =
+   H("rapp/1:particle", manifest)` and compares it with the one given (else `mismatch`), and then checks its form by the
+   section 13.5 rules that need no registry (the members, the `release` name, `id` and `kind` grammar and order, commits, tags,
+   the section 9.1 path grammar and its collisions, digests, sizes, and at most one door-of-record binding per rappid), in the
+   order rev-17's `verify_release_manifest` uses.
 2. For each component whose `repository` is `https://github.com/<owner>/<repo>`, it fetches every pinned file at
    `<release raw prefix><owner>/<repo>/<commit>/<path>` (the prefix is `https://raw.githubusercontent.com/` unless given) and
    checks its length and SHA-256. A file of a component elsewhere is `refused`. When every file matched, each door-of-record
@@ -489,7 +490,7 @@ A station has `station`, `repo`, `hive`, `curated`, `line`, `also_on`, `channel`
 `integrity`, `files` (each `{"path", "sha256", "state"}`, sorted by path), `card` (`{"present", "what", "version",
 "channel", "lifecycle", "superseded_by", "indexable", "links", "shares", "rappid", "claims_hive"}`), `release` (`null`, or
 `{"component", "agrees"}`) and `findings`. For a curated station, `line`, `also_on`, `channel`, `lifecycle` and
-`superseded_by` are the pointer's; for an uncurated one, the card's (`null` when the card states none). With a manifest whose state is `checked` or `failed`,
+`superseded_by` are the pointer's; for an uncurated one, the card's (`null` when the card states none; `also_on` is then `[]`). With a manifest whose state is `checked` or `failed`,
 every station has `release: {"component": <id or null>, "agrees": <bool>}`, where `agrees` is `false` exactly when the
 station has a `release-drift`, `release-missing` or `door-of-record-drift` finding; otherwise `release` is `null`.
 
@@ -688,6 +689,8 @@ member_cards.py cards    --portfolio DIR --family FILE --out DIR [--repos a,b] [
 member_cards.py pointers --portfolio DIR --family FILE --lts-pins FILE --clones DIR --out DIR [--repos a,b]
 member_cards.py plan     --portfolio DIR --family FILE --clones DIR [--out FILE] [--repos a,b] [--lts-pins FILE]
 ```
+
+`card`, `cards` and `plan` take `--lts-pins` and check the file, but no card depends on a pin.
 
 Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, `--hive-name`, `--subway-url` and `--start-url`
 (and `pointers` takes `--raw-prefix`), which default to the values of the network the tool is built for.
