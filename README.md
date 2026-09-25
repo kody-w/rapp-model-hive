@@ -51,7 +51,7 @@ the review, and checks the commits with stock `git verify-commit` and `ssh-keyge
 
 ## How it fits the Brainstem
 
-A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 2,200 lines and at most 1,300
+A Hive needs one file: [`agents/hive_agent.py`](agents/hive_agent.py), about 2,400 lines and at most 1,300
 statements, needing only Python, `cryptography` and git. Copy it into your Brainstem's `agents/` folder. It adds
 one tool, **Hive**, and then you talk:
 
@@ -76,6 +76,11 @@ Hive inside a known sync folder is refused. The Brainstem's frozen core is untou
 The shared copy is a git remote (ssh, https or git) or a folder. A folder shared copy must be a bare git repository:
 git runs that copy's side of every push and fetch, so the Brainstem switches off git's known config hooks there. Anyone
 who can write the folder can still stall it, but cannot sign as a member.
+
+A reference can also be a Hive's public copy on the web, pinned at one commit (`reference url=`). The Brainstem reads its
+PUBLISHED.md and only the files it lists, each checked against its hash, into a cache on this device. For a Hive root
+whose stations keep their own member spaces, `resolve` reads each station at the commit its pointer pins, the same way.
+Nothing is committed until a member brings a piece in. See [Remote member spaces](HIVE-MD.md#remote-member-spaces).
 
 The same file is the checker, with no Brainstem needed:
 

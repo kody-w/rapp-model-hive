@@ -36,3 +36,5 @@ python -B -m unittest discover -s tests -v  # every journey, attack, interop and
 7. **The Brainstem's frozen core** (`brainstem.py`, `agents/basic_agent.py`, `VERSION`) is never edited.
 8. **Plain words.** Short sentences in docs and in the agent's replies.
 9. **Tests prove it.** Every rule has a test. Run the tests and the build check before every commit.
+10. **No internet in tests.** Remote references are tested against a local raw server on 127.0.0.1, serving a synthetic
+    Contoso network that the test builds.

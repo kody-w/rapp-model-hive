@@ -104,6 +104,87 @@ when a member brings a piece of it in by one signed commit, into `shared/<room>/
 file. Names are made portable; a name already taken gets `-2`, `-3`, and links follow. Another Hive is brought from
 only through a clean public copy: `PUBLISHED.md`, no `HIVE.md`, and `check-public` finds nothing.
 
+## Remote member spaces
+
+A network of repositories can be one Hive. A **station** is one public repository on it; its member space is its card
+`.rapp/member.md` and the files it shares under `.rapp/shared/`, changed by its own commits. Nothing else under `.rapp/`
+is read: `.rapp/cache/`, `.rapp/workspace/`, `.rapp/reports/` and the bootstrap files belong to the RAPP Workspace.
+
+The Hive root keeps one **pointer** per station in its one published room: `shared/<room>/members/<station>.md` in the
+Hive, `members/<station>.md` in its public copy (the Hive's own `members/` holds people's spaces, and the checker refuses
+a pointer there). A pointer or card holds only `key: value` and `  - item` lines in its frontmatter, each key once; any
+other line, or an unknown or missing key, is refused. The example hashes are illustrative.
+
+| Pointer key | Value |
+|---|---|
+| `station` | its name, the file's name without `.md` |
+| `repo`, `raw` | `owner/repo`, and the raw base it is read from, ending in `/` |
+| `lts`, `newest` | only with `channel: lts`, the 40-hex commit it is read at; `HEAD`, or a branch name without `/` |
+| `line`, `also_on` (optional) | its line id; a sorted list of other lines |
+| `channel`, `lifecycle` | `lts` or `newest`; `active`, `frozen` or `retired` |
+| (the body) | with `lts` only: `sha256  path` for each file read at that commit, sorted, at most 200 (64 KB in all) |
+
+```markdown
+---
+station: protocol
+repo: contoso/protocol
+raw: https://raw.githubusercontent.com/contoso/protocol/
+lts: 4f7a1c0e9b2d3a5f6e8c7b9a0d1e2f3a4b5c6d7e
+newest: HEAD
+line: contoso-core
+channel: lts
+lifecycle: active
+---
+
+2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  .rapp/member.md
+fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9  README.md
+```
+
+| Card key | Value |
+|---|---|
+| `member`, `repo` | its repository's name, and the `owner/repo` it is read from |
+| `hive`, `hive_root` | the id of its Hive, and the raw base of that Hive's public copy |
+| `what`, `line`, `channel`, `lifecycle` | what it is, in one line of at most 200 characters; the rest as in the pointer |
+| `also_on`, `version`, `indexable` (optional) | as in the pointer; its version; `false` to stay out of network indexes |
+| `links`, `shares` (optional) | sorted lists: neighbors (`repo` or `owner/repo`); its paths under `.rapp/shared/` |
+| `rappid` (once it exists) | the `rappid` of its own `rappid.json` |
+
+```markdown
+---
+member: protocol
+repo: contoso/protocol
+hive: c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e
+hive_root: https://raw.githubusercontent.com/contoso/hive-public/
+what: The Contoso protocol spec.
+line: contoso-core
+channel: lts
+lifecycle: active
+---
+```
+
+The network reads only the **readable set**: `README.md`, `rappid.json`, `.rapp/member.md` and `.rapp/shared/<p>` (one to
+four names that work on every system and are no instruction file's; at most 120 characters in all; ending in `.md`,
+`.json` or `.txt`). Hashes follow PUBLISHED.md's rule: SHA-256 of the UTF-8 text with LF line ends, in NFC. A raw URL
+cannot list a folder, so PUBLISHED.md and a pointer's `sha256  path` lines are the indexes.
+
+A **remote reference** is pinned with `url=`: a clean public copy's raw base at a full 40-hex commit
+(`https://<host>/<path>/<commit>/`; `http` only to this device; no user name, query or fragment). Reading it fetches
+PUBLISHED.md there, then each file it lists, never following a redirect; a file is kept only if it is at most 1 MB,
+passes the text rules above and matches its listed hash. Anything else is left out and named, nothing unlisted is
+fetched, and a listing that names `HIVE.md`, or names that differ only by case, is refused whole. What passes is kept in
+`.git/rapp-hive/remote/<label>/` and read like any reference: raw data, fenced, never run. `bring` marks each copy with
+`brought_from:` the exact raw URL of the file at that commit, and `brought_sha256`.
+
+`resolve ref=<label>` reads a Hive root's stations: for each pointer with `lts`, every listed file at `<raw><lts>/<path>`,
+checked against the pointer's hash, into the same cache as `stations/<station>/<path without a leading .rapp/>` (so
+`.rapp/member.md` becomes `stations/<station>/member.md`). A pointer's `raw` passes the same rules, on the root's host; a
+root file under `stations/` is left out. It names the stations verified, those not pinned and every problem, commits
+nothing, and fetches only what the cache lacks. The hashes prove integrity only: authenticity stays unverified until the
+estate that pins this root is anchored.
+
+`lts` is the long-term-support channel; `newest` moves, and the Brainstem reads only pinned commits. The network tooling's
+resolver also walks newest, and the chain above the root: seed, beacon, `estate.json` `hives[]` (RAPP proposal 0020).
+
 ## Shared copies
 
 A shared copy is a git remote reached over ssh, https or git, or a folder; no other transport or remote helper is used.
@@ -119,10 +200,12 @@ python agents/hive_agent.py check <hive-folder> [--root <commit from the invitat
 python agents/hive_agent.py check-public <public-copy> --hive <hive-folder>
 git -c gpg.format=ssh -c gpg.ssh.allowedSignersFile=<file> log --show-signature
 ssh-keygen -Y verify -f <file> -I <name> -n rapp-hive-request -s <signature> < <signed-text>
+curl -s <raw base><commit>/<listed path> | sha256sum
 ```
 
 Stock tools check signatures (list `<name> namespaces="git,rapp-hive-request" ssh-ed25519 <key>` per key file); only the
-checker checks the rule.
+checker checks the rule. For a fetched file whose text has LF line ends and is in NFC, `sha256sum` gives the hash that
+PUBLISHED.md or a pointer lists.
 
 ## Known limits
 
@@ -133,3 +216,8 @@ checker checks the rule.
   removed and re-admitted by the others.
 - A shared device, such as a kiosk, must not hold a member key.
 - A plan proposed in one chat tab can be applied from another on the same device. Plain editors check nothing.
+- A remote reference is only as honest as the PUBLISHED.md at its pinned commit: the raw server is trusted only as far as
+  the listed hashes, and nothing signs that listing until the estate that pins the root is anchored. A public copy that
+  moves is never read; pin a newer commit to see newer files.
+- A station named like an instruction file (`agents`, `claude`, `gemini`, `skill`, `copilot-instructions`) cannot have a
+  pointer: `members/agents.md` is refused like any `AGENTS.md`.
