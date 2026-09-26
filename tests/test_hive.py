@@ -1466,11 +1466,22 @@ class RemoteMembers(HiveTest):
         (which the agent before f05aef5 took), is refused when it is read, before any fetch: pin it again."""
         deep = "https://raw.githubusercontent.com/fabrikam/drafts/main/contoso/hive-public/" + "c" * 40 + "/"
         ha.dump(ha.Hive(self.A.home, be.HIVE).st("references.json"), {"old": deep})
-        start = len(self.raw.requests)
-        for action in ("list", "resolve"):
-            with self.subTest(action=action):
-                self.not_done(self.A.say(action=action, ref="old"), "pinned at an address that is read no longer")
-        self.assertEqual(self.raw.requests[start:], [])
+        opener, opened = ha.OPENER, []
+
+        class Recorder:  # keeps every request the agent makes, wherever it would go
+            def open(self, *args, **kw):
+                opened.append(args)
+                return opener.open(*args, **kw)
+        ha.OPENER = Recorder()
+        try:
+            for action in ("list", "resolve"):
+                with self.subTest(action=action):
+                    reply = self.A.say(action=action, ref="old")
+                    self.not_done(reply, "pinned at an address that is read no longer")
+                    self.assertNotIn("is the public copy at", reply)  # refused before it is described
+        finally:
+            ha.OPENER = opener
+        self.assertEqual(opened, [])
 
     def test_a_public_copy_is_read_file_by_file_each_checked_and_fenced(self):
         start = len(self.raw.requests)

@@ -2056,9 +2056,9 @@ class HiveAgent(BasicAgent):
     def source(self, h, kw, say):
         label, root = str(kw.get("ref")), load(h.st("references.json"), {}).get(str(kw.get("ref")))
         if str(root).startswith(("https://", "http://")):
+            origins, left = remote(h.st("remote", label), root)  # it refuses a stale pin first
             say(f"Reference {label} is the public copy at {root.partition('#')[0]}: only what "
                 "its PUBLISHED.md lists is read, each file checked against its listed hash.")
-            origins, left = remote(h.st("remote", label), root)
             say(*[f"Left out {say.p(shown(p))}: {say.q(shown(why))}"
                   for p, why in sorted(left.items())][:50],
                 *[f"... and {len(left) - 50} more left out"] * (len(left) > 50))
