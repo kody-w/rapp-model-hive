@@ -206,7 +206,7 @@ Superseded by fabrikam/weather-next. The Contoso Hive reads it at `HEAD` only.
 | `superseded_by` | with `superseded` | as in the pointer, and never without a `lifecycle` that allows it |
 | `indexable` | no | `false` keeps it out of network indexes; `true`, or no key, lets it in |
 | `links` | no | its neighbors, each `<repo>` (of the card's own owner) or `<owner>/<repo>`; sorted |
-| `shares` | no | the paths it shares, each a `.rapp/shared/...` path of the readable set; sorted |
+| `shares` | no | the paths it shares, each a `.rapp/shared/...` path of the readable set; sorted; at most 197, so that with `README.md`, `rappid.json` and the card a station has at most 200 files to read (section 13) |
 | `rappid` | once minted | exactly the `rappid` of its own `rappid.json` at the same commit (a RAPP/1 section 6.1 rappid) |
 
 A reader checks a card this way:
@@ -219,8 +219,9 @@ A reader checks a card this way:
   `active`, and neither `channel` nor `version`.
 - `hive` names the Hive whose root curates it. If not, the finding is `claims-other-hive`: the card is recorded, but not
   counted as a member card of that Hive.
-- Every `shares` path is in the readable set (else `share-not-readable`). At LTS, a shared path the pointer does not list is not
-  fetched (`unlisted-share`).
+- Every `shares` path is a `.rapp/shared/...` path of the readable set, so never `README.md`, `rappid.json` or the card itself
+  (else `share-not-readable`), and no path is read twice. A card with more than 197 shares is `card-invalid`. At LTS, a shared
+  path the pointer does not list is not fetched (`unlisted-share`).
 - `rappid`, when there, equals the `rappid` of the repository's `rappid.json` at the same ref (else `rappid-mismatch`). No tool
   here mints a rappid or writes `rappid.json`; a card only mirrors one that exists.
 - With `indexable: false`, the station is kept only as `{"repo": ..., "indexable": false}` and its links are not followed, as a
@@ -358,7 +359,7 @@ starts at `hives[].published_sha256`.
 The same walk at moving refs: the Hive root's `PUBLISHED.md` at `<root>HEAD/` (its hash is recorded, not checked against a pin,
 and the files it lists are still checked against it), each pointer's `newest` ref, and `HEAD` for uncurated stations. At a
 station it reads `.rapp/member.md` and `README.md`, then `rappid.json` if the card names a `rappid`, then each path the card
-`shares`. It follows links and successors into uncurated stations, breadth first (at most 3 hops and 1,000 stations), and
+`shares` (at most 197, each read once). It follows links and successors into uncurated stations, breadth first (at most 3 hops and 1,000 stations), and
 honors `indexable: false`. Every station file is `unpinned`.
 
 ### 11.3 Starting anywhere
@@ -426,17 +427,19 @@ signed RAPP/1 section 13 registry anchors any of it yet. Integrity, the hash cha
 
 - At most 1 MiB per station or root file and 8 MiB per release file, refused before more than the limit and one byte is read;
   200 files per station; 5,000 files per Hive root listing and per release (a larger one is refused before any fetch); 1,000
-  stations; 3 hops; 15 seconds per request.
+  stations; 3 hops; 15 seconds per request, from connecting to its last byte (a request still under way then is cut off, and
+  that is a timeout; the name lookup before it is left to the system).
 - At most 4 requests at once (at most 8 by choice) and 8 requests a second in all.
 - A 429, 500, 502, 503 or 504, a timeout or a reset connection is retried, up to 4 attempts in all, with backoff and jitter
   (0.5 s, 1 s, 2 s), honoring `Retry-After` up to 60 s. A 404 is final (`missing`); any other answer is final.
-- A cache keeps one entry per URL. A URL at a 40-hex commit never changes, so a cached copy that matches is used without a
-  request; a moving URL is asked again with `If-None-Match` or `If-Modified-Since`.
+- A cache keeps one entry per URL. A URL at a 40-hex commit never changes, so a cached copy that matches its pin (or that
+  nothing pins) is used without a request, and one that does not is asked for again, the answer replacing it; a moving URL is
+  asked again with `If-None-Match` or `If-Modified-Since`. `--offline` reads the cache as it is.
 - Redirects are refused. Requests carry a `User-Agent`, and never credentials or cookies.
 - **Transport policy**, as in `sniff_network.py`: allowed are `https://raw.githubusercontent.com` and the start URL's origin, and
   the origins and `file://` folders the user adds. A URL outside the policy is never fetched (`outside-policy`), and neither is a
-  URL with a user name, a query, a fragment, a `.` or `..` part, a backslash or a NUL, or a scheme other than `https`, `http`
-  or `file`.
+  URL with a user name, a query, a fragment, a `.` or `..` part, a backslash or a NUL, a character outside ASCII (a raw URL
+  percent-encodes any other letter), or a scheme other than `https`, `http` or `file`.
 
 ## 14. The resolver: commands and exit codes
 
@@ -464,7 +467,9 @@ hive_resolve.py pulse --graph FILE --stream-rappid RAPPID [--prev FRAME.json] --
 
 ## 15. `graph.json`
 
-Keys sorted, UTF-8, a two-space indent and one final newline. Lists are sorted too, so the same network, flags and
+Keys sorted, UTF-8, a two-space indent and one final newline; a character HIVE-MD's text rules refuse (a C1 control, DEL, a
+bidi, invisible or private-use character) is written as its `\uXXXX` escape, as JSON writes C0 controls, so the file is safe to
+print. Lists are sorted too, so the same network, flags and
 `--fixed-time` give the same bytes. `graph_sha256` is the SHA-256 of the RFC 8785 canonical JSON of every member except
 `generated_at` and `graph_sha256`.
 
@@ -644,7 +649,10 @@ A subway map reads `stations[].line`, `also_on`, `lifecycle` and `edges`. A puls
 ## 16. The snapshot
 
 `resolve --out DIR` writes into a new folder next to `DIR` and swaps it in at the end, so `DIR` is never half written. `DIR` must
-be absent, empty, or an earlier snapshot (one that holds `SNAPSHOT.json`). Nothing is written through a link.
+be absent, empty, or an earlier snapshot (one whose `SNAPSHOT.json` is a regular file, not a link, holding a
+`rapp-hive-snapshot/1` document); anything else is exit `2`, and nothing in it is touched. Nothing is written through a link.
+Each path is written once: the same file read for two Hives is written and listed once, and another file at a path already
+written, or at one that differs from it only by case, is skipped.
 
 ```text
 DIR/SNAPSHOT.json                          rapp-hive-snapshot/1
@@ -659,7 +667,7 @@ DIR/release/<component id>/<path>          every file it pins, only when every o
 `{"path", "url", "sha256", "state", "anchor"}`, where `anchor` names what pinned it: `estate.json hives[] published_sha256`
 or `--hive-published-sha256` for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a
 station's files, `release manifest` for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`, without
-one), or `null` when nothing pinned it), `skipped` (files not written, and why; a release that did not check out adds one entry
+one), or `null` when nothing pinned it), `skipped` (files not written, and why, in fixed words that name no path of the device, sorted by path; a release that did not check out adds one entry
 `release`), `graph_sha256` and `generated_at`.
 
 ## 17. Pulses
@@ -677,6 +685,9 @@ A walk can be announced as a RAPP/1 section 7 frame of kind `body.pulse`. A stre
 An unsigned pulse is a valid RAPP/1 frame whose hash chain proves integrity only; it does not speak for the estate. Under the
 rev-17 draft (section 13.7), a pulse speaks for the estate only when the estate owner signs it, or when a `stream-signer` entry
 grants its signer that stream and kind. Station repositories carry no frames.
+
+Both commands refuse (exit `2`) a graph whose `graph_sha256` does not match it, that holds a value outside RAPP/1's canonical JSON
+(a float), or whose `hives`, `mode` or `totals` have another shape than section 15's.
 
 ## 18. The card generator
 
@@ -705,15 +716,18 @@ Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, 
   `archived` when it is known.
 - `--lts-pins FILE`: either a RAPP/1 release manifest (`rapp/1-release-manifest`), in which each component whose repository is
   `https://github.com/<owner>/<repo>` pins that repository's LTS commit (it is checked as a value, so it may be pretty-printed);
-  or a JSON object mapping `<owner>/<repo>` or `<repo>` to a 40-hex commit or to `{"commit": ...}`, at the top level or under
-  `pins`.
+  or a JSON object mapping `<owner>/<repo>` or `<repo>` to a 40-hex commit (lowercase) or to exactly `{"commit": <one>}`, at
+  the top level or under `pins`. Any other entry refuses the whole file (exit `2`); two keys that pin one repository at two
+  commits refuse its pointer.
 
 **Fields.** `line` is the portfolio's `family`, and the card's body shows the line's name. `what` is the inventory's
 `description`, cut to the text rules and to 200 characters on a word boundary (or `A <line name> repository on the RAPP/1
 network.`). `lifecycle` and `superseded_by` are the portfolio's, else `archived` when the inventory says archived, else
 `active`; nothing is inferred from other files. A card gets them only when the lifecycle is not `active`; a pointer always gets
-them, with `channel`, which is `rapp1-lts` exactly when an LTS pin is given. `links` is `links_to` without the repository itself
-and without names of instruction files. `rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else.
+them, with `channel`, which is `rapp1-lts` exactly when an LTS pin is given. `links` is `links_to` (each a bare name, meaning the portfolio owner's
+repository, or `<owner>/<repo>`) without the repository itself, in either form and compared without case, and without names of
+instruction files; a neighbor of the card's own owner is written as its bare name, any other as `<owner>/<repo>`, each once,
+sorted by code point, and each Neighbors link in the body points at its own owner's repository. `rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else.
 The generator writes no `version` and no card `channel`: they would go stale in the station's own files.
 
 **Commands.**
@@ -728,8 +742,9 @@ The generator writes no `version` and no card `channel`: they would go stale in 
   body `# <station>`, then `[Superseded by <repo>. | Deprecated[; its successor is <repo>]. | Archived[; its successor is
   <repo>]. ]The <hive name> reads it at `HEAD` only.`, as the second example of section 7.
 - `plan` writes `rapp-hive-card-plan/1`: `auto` or `hold` for each repository, with the reasons. It holds a repository that pins
-  its tracked path set (a tracked file with `tracked_path_count`, `tracked_path_set_sha256`, `path_set_sha256` or
-  `tracked_paths`, or a `MANIFEST*` or `*INVENTORY*.json` file that lists at least half of the tracked paths), that has anything
+  its tracked path set (a tracked file of any size with `tracked_path_count`, `tracked_path_set_sha256`, `path_set_sha256` or
+  `tracked_paths`, or a `MANIFEST*` or `*INVENTORY*.json` file that lists at least half of the tracked paths, itself among them;
+  such a file over 16 MiB is held as too large to check, and so is a repository whose clone cannot give a tracked file), that has anything
   in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs, that is empty, that is
   named like an instruction file, that has no local clone, or whose generated card would not validate. `pointers` refuses a
   repository whose portfolio `channel` disagrees with its pin (`rapp1-lts` without a pin, or `newest` with one).
@@ -830,7 +845,7 @@ the one in section 15.
 | `card-invalid` | a card does not follow section 8 |
 | `repo-mismatch` | a card names another repository than the one it was read from |
 | `claims-other-hive` | a card names another Hive than the one that curates it |
-| `share-not-readable` | a card shares a path outside the readable set |
+| `share-not-readable` | a card shares a path that is not a `.rapp/shared/...` path of the readable set |
 | `unlisted-share` | at LTS, a card shares a path its pointer does not list: not read |
 | `rappid-mismatch` | a card's `rappid` differs from its `rappid.json` |
 | `lifecycle-differs`, `channel-differs` | a pointer and its station's card disagree |
