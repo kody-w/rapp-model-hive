@@ -18,8 +18,8 @@ A Hive is folders and files, and so is a network of repositories. So the network
   beacon, `estate.json` `hives[]`, the root's `PUBLISHED.md`, pointers, station files, and the links on each card.
 - One command resolves that graph at the LTS commits into a local snapshot in which every file matched its pinned hash.
 
-Hashes give integrity only. Until the estate that pins a Hive root is anchored by a signature, every result says
-`authenticity: unverified`, and nothing is accepted.
+Hashes give integrity only. Until a signed entry of the estate's RAPP/1 registry covers the chain, every result says
+`authenticity: unverified`, and nothing is accepted. (An estate's registry may already be signed and still cover none of it.)
 
 ## 2. Words
 
@@ -119,7 +119,8 @@ between is either `key: value` or an item `  - item` under a key whose value is 
 `[a-z][a-z0-9_]*` and appears once. A value, and an item, has at least one character and neither starts nor ends with
 whitespace (any character Python's `str.strip()` removes). Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
 an item list belongs. Lists are sorted by code point (as Python's `sorted` sorts them) and hold no item twice. A file has at
-most 64 KB and follows the text rules of section 5.2.
+most 64 KB and follows HIVE-MD's text rules; a card, a station file, is also normalized text (section 5.2), while a
+pointer, a root file, is read after HIVE-MD's normalization.
 
 Writers put the keys in the order of the tables below; readers accept any order. This is a strict subset of what HIVE-MD's
 frontmatter reader takes, so the Hive agent reads these files the same way.
@@ -128,7 +129,7 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 
 | Key | Required | Value |
 |---|---|---|
-| `station` | yes | its station name (section 3): the file's name without `.md` |
+| `station` | yes | the file's name without `.md`, which must be `repo`'s station name (section 3); a pointer whose name is not is `pointer-invalid` |
 | `repo` | yes | `<owner>/<repo>` |
 | `raw` | yes | the raw base it is read from; its last two path parts are `repo`'s owner and name (compared without case) |
 | `lts` | with `rapp1-lts` | its LTS commit, 40 lowercase hex; there exactly when `channel` is `rapp1-lts` |
@@ -139,7 +140,8 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 | `lifecycle` | yes | `active`, `deprecated`, `superseded` or `archived` (section 9) |
 | `superseded_by` | with `superseded` | its successor's `<owner>/<repo>`; allowed with `deprecated` or `archived`, never with `active`, never its own repo |
 
-**The LTS manifest.** Every body line of the form `<64 lowercase hex><two spaces><path>` is a manifest line. With `lts`, the
+**The LTS manifest.** Every body line of the form `<64 lowercase hex><two spaces><path>`, where `<path>` does not start with a
+space, is a manifest line. With `lts`, the
 body has 1 to 200 of them: each path once, sorted by path, no two that differ only by case (after dropping a leading
 `.rapp/`), and each hash that file's hash (section 5.2) at the LTS commit. Writers list only paths of the readable set, and
 list `.rapp/member.md` whenever it exists at the LTS commit; a reader refuses a listed path outside the readable set before
@@ -298,7 +300,7 @@ The chain above the root is RAPP's: Constitution Article XLVII, and the seed, be
 - **The beacon**, `rapp-network-beacon/1.0` or `rapp-network-beacon/1.1`, unchanged (Articles XLVII and XLVIII): `schema`,
   `operator_rappid` (an exact RAPP/1 section 6.1 rappid; legacy forms are refused), `estate_url` (which wins over the seed's),
   `discovery.indexable` (consent; no key means `true`) and `discovery.federation_hints` (walked breadth first).
-- **`estate.json`** may carry a top-level array `hives[]`. Each entry has exactly these five members:
+- **`estate.json`** may carry a top-level array `hives[]` (RAPP proposal 0020). Each entry has exactly these five members:
 
 | Member | Value |
 |---|---|
@@ -421,7 +423,8 @@ is left to RAPP/1's reference implementation; this resolver checks no signature.
 `unreachable`, `outside-policy`, `not-reached` or `skipped`.
 
 **Everywhere**, `authenticity` is `{"state": "unverified", "reason": "estate-not-anchored"}` and `accepted` is `false`: no
-signed RAPP/1 section 13 registry anchors any of it yet. Integrity, the hash chain, is all a reader checks.
+signed RAPP/1 section 13 registry entry covers any of it yet (`estate-not-anchored` means exactly that). Integrity, the hash
+chain, is all a reader checks.
 
 ## 13. Bounds, politeness and the transport policy
 
@@ -436,7 +439,7 @@ signed RAPP/1 section 13 registry anchors any of it yet. Integrity, the hash cha
   nothing pins) is used without a request, and one that does not is asked for again, the answer replacing it; a moving URL is
   asked again with `If-None-Match` or `If-Modified-Since`. `--offline` reads the cache as it is.
 - Redirects are refused. Requests carry a `User-Agent`, and never credentials or cookies.
-- **Transport policy**, as in `sniff_network.py`: allowed are `https://raw.githubusercontent.com` and the start URL's origin, and
+- **Transport policy**, an origin allow-list like `sniff_network.py`'s, with these defaults: allowed are `https://raw.githubusercontent.com` and the start URL's origin, and
   the origins and `file://` folders the user adds. A URL outside the policy is never fetched (`outside-policy`), and neither is a
   URL with a user name, a query, a fragment, a `.` or `..` part, a backslash or a NUL, a character outside ASCII (a raw URL
   percent-encodes any other letter), or a scheme other than `https`, `http` or `file`.
@@ -778,7 +781,13 @@ The Hive agent, `agents/hive_agent.py`, reads the distributed Hive with two acti
 
 Its cache, `.git/rapp-hive/remote/<label>/`, holds the root's listed files at their public-copy paths (with `PUBLISHED.md`),
 each station's files at `stations/<station>/<path without a leading .rapp/>`, and a hidden `.origins.json` with the exact raw URL
-of each. A root file under `stations/` is left out, and a station's raw base must be on the root's host.
+of each. A root file under `stations/` is left out, and a station's raw base must have the root's origin: the same scheme, host
+and port, compared exactly as written.
+
+The agent keeps these of section 13's bounds: 1 MB per file, read no further; a listing of more than 5,000 files, or one that
+lists a path twice, is refused whole; a root that points to more than 1,000 stations is not resolved; 200 files per station and
+64 KB per pointer (section 7); and its replies name at most 50 files left out and 200 problems, then say how many more. Its
+15 seconds apply to each read from the network, not to a whole request, and it keeps no request rate: those are the resolver's.
 
 ## 20. Worked example
 
@@ -838,7 +847,6 @@ the one in section 15.
 | `outside-policy` | a URL the transport policy does not allow: never fetched |
 | `pointer-invalid` | a listed pointer does not follow section 7 |
 | `duplicate-station` | a second pointer for a repository that already has one (a listing with two names that differ only by case is refused whole) |
-| `station-name` | a pointer's name is not its repository's station name (section 3) |
 | `max-stations` | beyond the station limit: not walked |
 | `mismatch`, `missing`, `refused`, `unreachable` | a file in that state (section 12) |
 | `no-card` | a pointer's manifest does not list `.rapp/member.md`, or a station has no card at `HEAD` |

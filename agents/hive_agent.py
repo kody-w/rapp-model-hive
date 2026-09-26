@@ -774,9 +774,10 @@ def check_public(folder, hive=None):
     if "PUBLISHED.md" not in plain:
         return ["there is no committed PUBLISHED.md"]
     meta, body = front(snap.raw("PUBLISHED.md").decode("utf-8", "replace"))
-    index, problems = (dict(listing(body)),
+    index, problems = (dict(rows := listing(body)),
                        [f"`{p}` is not a plain file of at most 1 MB" for p in sorted(snap.files)
-                        if p not in plain])
+                        if p not in plain] + ["PUBLISHED.md lists a path twice"] * (
+                           len({p for p, _ in rows}) != len(rows)))
     if ".gitattributes" in plain and snap.raw(".gitattributes") != ATTRS:
         problems.append("`.gitattributes` is not exactly `* text eol=lf`")
     hashes = {}  # {path: sha256 of its normalized text}
@@ -1137,8 +1138,8 @@ def pull(cache, wanted):
             data = (read(full) if os.path.isfile(full)
                     and sha(norm(read(full), "replace")) == digest else fetch(url))
             text_rules(place, data, names=lambda _: None)  # its path was judged before
-            if (hashlib.sha256(data).hexdigest() if place[:9] == "stations/"
-                    else sha(norm(data))) != digest:
+            if ((hashlib.sha256(data).hexdigest() if norm(data).encode() == data else "")
+                    if place[:9] == "stations/" else sha(norm(data))) != digest:
                 raise Refused("it does not match the hash its listing gives" + (
                     " (by its bytes: a station's file is normalized text, LF line ends and NFC)"
                     if place[:9] == "stations/" else ""))
@@ -1163,10 +1164,11 @@ def remote(cache, base):
     if anchor and sha(norm(data)) != anchor:
         raise Refused("its PUBLISHED.md does not match the sha256= it was pinned with, so nothing "
                       "of it is read")
-    files = dict(listing(norm(data)))
-    if any(p.casefold() == "hive.md" for p in files) or case_clash(files):
-        raise Refused("its PUBLISHED.md lists HIVE.md, or names that differ only by case, so it is "
-                      "not a clean public copy")
+    files = dict(rows := listing(norm(data)))
+    if (any(p.casefold() == "hive.md" for p in files) or case_clash(files)
+            or len(files) != len(rows) or len(rows) > 5000):
+        raise Refused("its PUBLISHED.md lists HIVE.md, a path twice, names that differ only by "
+                      "case, or more than 5,000 files, so it is not a clean public copy")
     put(top, data)
     left = {p: "it is PUBLISHED.md itself, or in stations/, which resolve keeps for stations"
                if p.casefold() == "published.md" or p.split("/")[0].casefold() == "stations"
@@ -1204,6 +1206,8 @@ def pointer(path, text, root):
             or meta["lifecycle"] == "active" and "superseded_by" in meta
             or str(meta.get("superseded_by")).lower() == meta["repo"].lower()
             or meta["raw"].lower().rstrip("/").split("/")[-2:] != meta["repo"].lower().split("/")
+            or station != (meta["repo"].split("/")[1] if meta["repo"].split("/")[0].lower()
+                           == root.split("/")[-4].lower() else meta["repo"].replace("/", "."))
             or list(places) != sorted(q for q, _ in rows) or case_clash(places.values())):
         return "it is not a station pointer (DISTRIBUTED-HIVE.md, section 7)"
     why, ok = (url_refusal(meta["raw"], pinned=False) or meta["raw"].split("/")[:3]
@@ -2044,8 +2048,9 @@ class HiveAgent(BasicAgent):
             say(f"Reference {label} is the public copy at {root.partition('#')[0]}: only what "
                 "its PUBLISHED.md lists is read, each file checked against its listed hash.")
             origins, left = remote(h.st("remote", label), root)
-            say(*(f"Left out {say.p(shown(p))}: {say.q(shown(why))}"
-                  for p, why in sorted(left.items())))
+            say(*[f"Left out {say.p(shown(p))}: {say.q(shown(why))}"
+                  for p, why in sorted(left.items())][:50],
+                *[f"... and {len(left) - 50} more left out"] * (len(left) > 50))
             return label, h.st("remote", label), origins
         if not root or not os.path.isdir(root) or is_link(root):
             raise Refused(f"there is no reference {shown(kw.get('ref'))!r} here; pin it first")
@@ -2092,8 +2097,11 @@ class HiveAgent(BasicAgent):
     # and checked against the hashes the pointer gives, into this device's cache (never committed).
     def _resolve(self, say, kw):
         label, cache, origins = self.source(h := self.hive(kw)[0], kw, say)
-        if origins is None:
-            raise Refused("resolve reads a reference pinned with url=: a Hive root's public copy")
+        if origins is None or sum(bool(re.fullmatch(r"members/[^/]+\.md", p))
+                                  for p in origins) > 1000:
+            raise Refused("resolve reads a reference pinned with url=: a Hive root's public copy"
+                          if origins is None else "this root points to more than 1,000 stations; "
+                          "resolve reads at most 1,000")
         got = {p[8:-3]: pointer(p, norm(read(os.path.join(cache, *p.split("/")))),
                                 origins["PUBLISHED.md"])
                for p in origins if re.fullmatch(r"members/[^/]+\.md", p)}
@@ -2113,9 +2121,11 @@ class HiveAgent(BasicAgent):
                 f"verified ({len(ok)}): {', '.join(ok) or 'none'}",
                 f"not pinned, newest only, so not read ({len(waiting)}): "
                 + (", ".join(waiting) or "none"),
-                *(f"problem: {p}: {why}" for p, why in sorted(problems.items()))]) + "\n")),
-            "authenticity: unverified until the estate that pins this root is anchored; "
-            "integrity: every cached file matches the hash its listing gives; the root: "
+                *[f"problem: {p}: {why}" for p, why in sorted(problems.items())][:200],
+                *[f"... and {len(problems) - 200} more problems"] * (len(problems) > 200)])
+                + "\n")),
+            "authenticity: unverified until a signed entry of the estate's registry covers this "
+            "root; integrity: every cached file matches the hash its listing gives; the root: "
             + ("anchored by the sha256= it was pinned with."
                if "#" in str(load(h.st("references.json"), {}).get(label))
                else "trusted on first read (pin it with sha256= to anchor it)."),

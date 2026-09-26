@@ -265,6 +265,17 @@ class Story(unittest.TestCase):
             self.assertEqual(ha.check_public(copy), [])
             self.assertTrue(any(words in p for p in ha.check_public(copy, hive)), ha.check_public(copy, hive))
 
+    def test_J11_a_public_copy_that_lists_a_path_twice_is_not_clean(self):
+        copy = os.path.join(self.root, "check-twice", "contoso-onboarding-public")
+        shutil.copytree(self.r["public"], copy)
+        head = ha.rev(copy, "HEAD")
+        text = ha.Snap(copy, head).raw("PUBLISHED.md").decode()
+        line = next(x for x in text.split("\n") if re.fullmatch(r"[0-9a-f]{64}  \S.*", x))
+        commit = ha.make_commit(copy, ha.build_tree(copy, head, {"PUBLISHED.md": (text + line + "\n").encode()}), head,
+                                "avery", "List a page twice", be.test_key("avery-laptop2"))
+        ha.git(copy, "update-ref", "refs/heads/main", commit)
+        self.assertIn("PUBLISHED.md lists a path twice", ha.check_public(copy))
+
     def test_J12_old_hives_carried_byte_for_byte(self):
         previous = ha.listed(self.final.meta, "previous")
         self.assertEqual(previous, [be.RAPP_HIVE_2_ANCHOR, "77086a0d3de14331843c1b8d1217090e5a849675f62265727f5bdb541507a9d8"])
@@ -1369,8 +1380,8 @@ def contoso_network(folder, raw):
     write("tampered", pins["tampered"][1], ".rapp/member.md", card("tampered", "Changed after it was pinned!"))
     pointers["notes"] = (f"---\nstation: notes\nrepo: contoso/notes\nraw: {raw}contoso/notes/\nnewest: HEAD\nline: contoso-docs\n"
                          "also_on:\n  - contoso-core\nchannel: newest\nlifecycle: active\n---\n\n# notes\n\nRead at HEAD only.\n")
-    pointers["away"] = pointers["installer"].replace(f"raw: {raw}contoso/installer/", "raw: https://contoso.example/contoso/installer/").replace(
-        "station: installer", "station: away")
+    pointers["away"] = pointers["installer"].replace(f"raw: {raw}contoso/installer/", "raw: https://contoso.example/contoso/away/").replace(
+        "station: installer", "station: away").replace("repo: contoso/installer", "repo: contoso/away")
     pointers["broken"] = pointers["installer"].replace("station: installer", "station: broken\nsecret: yes")
     pointers["agents"] = pointers["agent-index"].replace("station: agent-index", "station: agents")  # an instruction file's name
     files = {**{f"members/{n}.md": t for n, t in pointers.items()}, "portfolio/lines.md": "# Lines\n\n- contoso-core\n- contoso-docs\n",
@@ -1498,12 +1509,23 @@ class RemoteMembers(HiveTest):
         self.assertEqual(sorted(os.listdir(self.cache("odd"))), [".origins.json", "PUBLISHED.md", "good.md"])
 
     def test_a_listing_with_hive_md_or_names_that_differ_only_by_case_is_refused_whole(self):
-        for name, files, words in (("with-rules", {"HIVE.md": "---\nhive: " + "d" * 32 + "\n---\n", "a.md": "# A\n"}, "lists HIVE.md"),
-                                   ("twins", {"notes/a.md": "# a\n", "Notes/b.md": "# b\n"}, "differ only by case")):
+        many = {f"n/{i:04}.md": "x" for i in range(5001)}
+        for name, files, listed, words in (("with-rules", {"HIVE.md": "---\nhive: " + "d" * 32 + "\n---\n", "a.md": "# A\n"}, None, "lists HIVE.md"),
+                                           ("twins", {"notes/a.md": "# a\n", "Notes/b.md": "# b\n"}, None, "differ only by case"),
+                                           ("many", {"a.md": "# A\n"}, {**many, "a.md": "# A\n"}, "more than 5,000 files")):
             with self.subTest(name=name):
-                self.A.do(action="reference", label=name, url=public_copy(self.web, self.raw.base, name, files))
+                start = len(self.raw.requests)
+                self.A.do(action="reference", label=name, url=public_copy(self.web, self.raw.base, name, files, listed))
                 self.not_done(self.A.say(action="list", ref=name), words)
                 self.assertFalse(os.path.exists(os.path.join(self.cache(name), "a.md")))
+                self.assertEqual(len(self.asked(start)), 1)  # only PUBLISHED.md was asked for
+        base = public_copy(self.web, self.raw.base, "twice", {"a.md": "# Second\n"})
+        published = os.path.join(self.web, "contoso", "twice", commit_id("contoso/twice"), "PUBLISHED.md")
+        text = ha.read(published).decode()
+        ha.put(published, text.replace(f"{ha.sha('# Second' + chr(10))}  a.md\n",
+                                           f"{ha.sha('# First' + chr(10))}  a.md\n{ha.sha('# Second' + chr(10))}  a.md\n").encode())
+        self.A.do(action="reference", label="twice", url=base)
+        self.not_done(self.A.say(action="list", ref="twice"), "a path twice")  # never the last line wins
 
     def test_resolve_reads_every_pinned_station_and_says_what_it_found(self):
         self.A.do(action="reference", label="contoso", url=self.root_url)
@@ -1521,7 +1543,8 @@ class RemoteMembers(HiveTest):
         for path in (".rapp/cache/x.md", ".rapp/workspace/y.md", ".rapp/bootstrap.json", ".rapp/shared/AGENTS.md"):
             self.assertIn(f"problem: stations/odd/{path}: it is not a file the network reads", summary)
             self.assertFalse(any(r.endswith(path) for r in self.asked(start)), path)  # never fetched
-        self.assertIn("authenticity: unverified until the estate that pins this root is anchored; integrity: every cached file matches", reply)
+        self.assertIn("authenticity: unverified until a signed entry of the estate's registry covers this root; integrity: every cached file matches",
+                      reply)
         cache = self.cache("contoso")
         for station, files in (("protocol", ["README.md", "member.md", "shared/spec summary.md"]), ("agent-index", ["README.md", "member.md", "shared/agents.json", "shared/index.txt"]),
                                ("rollout", ["README.md"]), ("odd", ["README.md"]), ("tampered", ["README.md"])):
@@ -1559,7 +1582,8 @@ class RemoteMembers(HiveTest):
         contract = ha.read(os.path.join(REPO, "DISTRIBUTED-HIVE.md")).decode()
         blocks = re.findall(r"```(?:markdown|json)\n(.*?)```", contract, re.S)
         pointer, moved, card = blocks[0], blocks[1], blocks[2]
-        meta, files, refused = ha.pointer("members/protocol.md", pointer, "https://raw.githubusercontent.com/")
+        root = "https://raw.githubusercontent.com/contoso/hive-public/ca1e0d63f4f02d0e380ec3471a7832625c336caf/"
+        meta, files, refused = ha.pointer("members/protocol.md", pointer, root)
         self.assertEqual((meta["station"], meta["channel"], refused), ("protocol", "rapp1-lts", {}))
         self.assertEqual(sorted(files), ["stations/protocol/README.md", "stations/protocol/member.md",
                                          "stations/protocol/shared/spec-summary.md"])
@@ -1570,11 +1594,12 @@ class RemoteMembers(HiveTest):
         published = next(b for b in blocks if b.startswith("---\nmanifest: "))
         self.assertEqual(dict(ha.listing(published))["members/protocol.md"], hashlib.sha256(pointer.encode()).hexdigest())
         self.assertIn(hashlib.sha256(published.encode()).hexdigest(), blocks[3])  # estate.json hives[] pins PUBLISHED.md
-        meta, files, refused = ha.pointer("members/fabrikam.weather.md", moved, "https://raw.githubusercontent.com/")
+        meta, files, refused = ha.pointer("members/fabrikam.weather.md", moved, root)
         self.assertEqual((meta["lifecycle"], meta["superseded_by"], files), ("superseded", "fabrikam/weather-next", {}))
         self.assertEqual(ha.hive_md(*ha.front(card)), card)  # only `key: value` and `  - item` lines
         self.assertEqual(ha.front(card)[0]["hive"], "c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e")
-        self.assertIn("its raw address is refused", ha.pointer("members/protocol.md", pointer, "https://contoso.example/"))
+        self.assertIn("its raw address is refused",
+                      ha.pointer("members/protocol.md", pointer, "https://contoso.example/contoso/hive-public/" + "c" * 40 + "/"))
         lines = pointer.split("\n")
         for broken in (pointer.replace("newest: HEAD\n", "newest: HEAD\na line without a colon\n"),  # front() would skip it
                        pointer.replace("newest: HEAD\n", "newest: HEAD\nnewest: main\n"),  # a key twice
@@ -1594,31 +1619,53 @@ class RemoteMembers(HiveTest):
                        pointer.replace("newest: HEAD", "newest: .hidden"), pointer.replace("newest: HEAD", "newest: a..b"),
                        pointer.replace("newest: HEAD", "newest: main.lock"),  # not a branch git accepts
                        "\n".join(lines[:-3] + [lines[-2], lines[-3], ""]),  # the manifest out of order
+                       pointer.replace(lines[-2], lines[-2] + "\n" + lines[-2]),  # a path twice
+                       pointer.replace(f"  .rapp/member.md", f"  .rapp/Member.md\n{'0' * 64}  .rapp/member.md"),  # names that differ only by case
+                       pointer.replace(lines[-3], "".join(f"{'0' * 64}  .rapp/shared/f{i:03}.md\n" for i in range(198)) + lines[-3]),  # 201 files
+                       pointer.replace("\n\n# protocol\n", "\n\n# protocol\n" + "x" * (64 << 10) + "\n"),  # over 64 KB
                        pointer.replace("station: protocol", "station: installer")):  # not its file's name
-            with self.subTest(broken=broken):
-                self.assertIn("not a station pointer", ha.pointer("members/protocol.md", broken, "https://raw.githubusercontent.com/"))
+            with self.subTest(broken=broken[:300]):
+                self.assertIn("not a station pointer", ha.pointer("members/protocol.md", broken, root))
+        self.assertIn("not a station pointer", ha.pointer("members/contoso.protocol.md", pointer.replace(
+            "station: protocol", "station: contoso.protocol"), root))  # the operator's own repo is named without its owner
         for kept in (pointer.replace("lifecycle: active", "lifecycle: deprecated"),
                      pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: contoso/protocol-2")):
-            self.assertIsInstance(ha.pointer("members/protocol.md", kept, "https://raw.githubusercontent.com/"), tuple)
-        long_name = "p" * 62
-        self.assertIn("not a station pointer", ha.pointer(f"members/{long_name}.md", pointer.replace("station: protocol", f"station: {long_name}"),
-                                                          "https://raw.githubusercontent.com/"))  # at most 61 characters
+            self.assertIsInstance(ha.pointer("members/protocol.md", kept, root), tuple)
+        for size, valid in ((61, True), (62, False)):  # a station name has at most 61 characters
+            name = "p" * size
+            named = pointer.replace("protocol", name).replace(f"# {name}\n", "# protocol\n")
+            self.assertEqual(isinstance(ha.pointer(f"members/{name}.md", named, root), tuple), valid, size)
 
     def test_a_station_file_is_kept_only_when_its_bytes_match(self):
         web = tempfile.mkdtemp(prefix="hive-raw-")
         self.addCleanup(be.rmtree, web)
-        raw, hive = Raw(web), "c0a1e5ce0d1e4a6b9f3e2d1c0b9a8f7e"
+        raw = Raw(web)
         try:
-            lts, text = commit_id("contoso/accents"), "# Cafe\u0301\n\nDecomposed, so not in NFC.\n"  # normalizes to other bytes
-            ha.put(os.path.join(web, "contoso", "accents", lts, "README.md"), text.encode())
-            listed = ha.sha(ha.norm(text.encode()))  # the hash of its normalized text, not of its bytes
-            page = (f"---\nstation: accents\nrepo: contoso/accents\nraw: {raw.base}contoso/accents/\nlts: {lts}\nnewest: HEAD\n"
-                    f"line: contoso-core\nchannel: rapp1-lts\nlifecycle: active\n---\n\n{listed}  README.md\n")
-            base = public_copy(web, raw.base, "accents-public", {"members/accents.md": page})
+            def station(name, text, listed, raw_base=None):
+                lts = commit_id("contoso/" + name)
+                ha.put(os.path.join(web, "contoso", name, lts, "README.md"), text.encode())
+                return (f"---\nstation: {name}\nrepo: contoso/{name}\nraw: {raw_base or raw.base + 'contoso/' + name + '/'}\nlts: {lts}\n"
+                        f"newest: HEAD\nline: contoso-core\nchannel: rapp1-lts\nlifecycle: active\n---\n\n{listed(text.encode())}  README.md\n")
+            nfd, port = "# Cafe\u0301\n\nDecomposed, so not in NFC.\n", raw.base.rstrip("/").rsplit(":", 1)[1]
+            pages = {"accents": station("accents", nfd, lambda b: ha.sha(ha.norm(b))),  # lists its normalized text's hash
+                     "decomposed": station("decomposed", nfd, lambda b: hashlib.sha256(b).hexdigest()),  # lists its bytes' hash
+                     "ctrl": station("ctrl", "a\x1b[8mb\n", lambda b: hashlib.sha256(b).hexdigest()),  # a control character
+                     "port": station("port", "# Port\n", lambda b: hashlib.sha256(b).hexdigest(),
+                                     raw.base.replace(f":{port}/", f":{int(port) + 1}/") + "contoso/port/"),  # another origin
+                     "ftp": station("ftp", "# Ftp\n", lambda b: hashlib.sha256(b).hexdigest(),
+                                    raw.base.replace("http://", "ftp://") + "contoso/ftp/"),  # the address rules apply
+                     "plain": station("plain", "# Plain\n", lambda b: hashlib.sha256(b).hexdigest())}
+            base = public_copy(web, raw.base, "accents-public", {f"members/{n}.md": pg for n, pg in pages.items()})
             self.A.do(action="reference", label="accents", url=base)
+            start = len(raw.requests)
             reply = self.A.say(action="resolve", ref="accents")
-            self.assertIn("problem: stations/accents/README.md: it does not match the hash its listing gives (by its bytes", reply)
-            self.assertIn("verified (0): none", reply)
+            for name in ("accents", "decomposed"):
+                self.assertIn(f"problem: stations/{name}/README.md: it does not match the hash its listing gives (by its bytes", reply)
+            self.assertIn("problem: stations/ctrl/README.md: `stations/ctrl/README.md`: only UTF-8 text, without control", reply)
+            self.assertIn("problem: members/port.md: its raw address is refused: it is not on the Hive root's host", reply)
+            self.assertIn("problem: members/ftp.md: its raw address is refused: only https://", reply)
+            self.assertIn("verified (1): plain", reply)
+            self.assertFalse(any("/contoso/port/" in r or "/contoso/ftp/" in r for r in raw.requests[start:]))  # never fetched
         finally:
             raw.stop()
 
@@ -1637,6 +1684,9 @@ class RemoteMembers(HiveTest):
         self.assertIn(" (4): agent-index, installer, protocol, rollout\n", reply)
         self.assertIn("the root: anchored by the sha256= it was pinned with.", reply)
         self.assertIn(f"public copy at {self.root_url}: only", reply)  # the address is shown without the anchor
+        cached = os.path.join(self.cache("contoso"), "PUBLISHED.md")
+        ha.put(cached, ha.read(cached) + b"\n")  # the cached copy no longer hashes to the anchor
+        self.not_done(self.A.say(action="list", ref="contoso"), "does not match the sha256= it was pinned with")
         self.A.do(action="reference", label="plain", url=self.root_url)
         self.assertIn("the root: trusted on first read", self.A.say(action="resolve", ref="plain"))
         start = len(self.raw.requests)

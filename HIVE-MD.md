@@ -116,21 +116,23 @@ Hive agent does with them.
 
 A **remote reference** is pinned with `url=`: a clean public copy's raw base at a full 40-hex commit
 (`https://<host>/<path>/<commit>/`; `http` only to this device; no user name, query or fragment). It may also be pinned with
-`sha256=`, the hash of its PUBLISHED.md (the `published_sha256` of its estate's `hives[]` entry); then a PUBLISHED.md that does
-not match it is refused, and nothing of the copy is read. Reading it fetches PUBLISHED.md there, then each file it lists, never
-following a redirect; a file is kept only if it is at most 1 MB, passes the text rules above and matches its listed hash.
-Anything else is left out and named, nothing unlisted is fetched, and a listing that names `HIVE.md`, or names that differ
-only by case, is refused whole. What passes is kept in `.git/rapp-hive/remote/<label>/` and read like any reference: raw data,
-fenced, never run. `bring` marks each copy with `brought_from:` the exact raw URL of the file at that commit, and
-`brought_sha256`.
+`sha256=`, the hash of its PUBLISHED.md (the `published_sha256` of its estate's `hives[]` entry); then a PUBLISHED.md that
+does not match it is refused, and nothing of the copy is read. Reading it fetches PUBLISHED.md there, then each file it
+lists, never following a redirect; a file is kept only if it is at most 1 MB, passes the text rules above and matches its
+listed hash. Anything else is left out and named, nothing unlisted is fetched, and a listing that names `HIVE.md`, a path
+twice, names that differ only by case, or more than 5,000 files is refused whole. What passes is kept in
+`.git/rapp-hive/remote/<label>/` and read like any reference: raw data, fenced, never run. `bring` marks each copy with
+`brought_from:` the exact raw URL of the file at that commit, and `brought_sha256`.
 
 `resolve ref=<label>` reads a Hive root's stations: for each pointer with `lts`, every listed file at `<raw><lts>/<path>`,
 into the same cache as `stations/<station>/<path without a leading .rapp/>` (so `.rapp/member.md` becomes
 `stations/<station>/member.md`). A station's file is kept only if its bytes are normalized text (LF line ends, NFC) whose
-SHA-256 is the one its pointer lists. A pointer's `raw` passes the same address rules, on the root's host; a root file under
-`stations/` is left out. It names the stations verified, those not pinned and every problem, says whether the root was anchored
-by `sha256=` or trusted on first read, commits nothing, and fetches only what the cache lacks. The hashes prove integrity only:
-authenticity stays unverified until the estate that pins this root is anchored.
+SHA-256 is the one its pointer lists. A pointer is read only when its name is its repo's station name (the repo's name when
+the root's owner owns it, else `<owner>.<repo>`), and its `raw` passes the same address rules at the root's origin (the same
+scheme, host and port); a root file under `stations/` is left out, and a root that points to more than 1,000 stations is not
+resolved. It names the stations verified, those not pinned and every problem, says whether the root was anchored by
+`sha256=` or trusted on first read, commits nothing, and fetches only what the cache lacks. The hashes prove integrity only:
+authenticity stays unverified until a signed entry of the estate's registry covers this root.
 
 The long-term-support channel is `rapp1-lts`; `newest` moves, and the Brainstem reads only pinned commits. The network
 tooling's resolver also walks newest, and the chain above the root: seed, beacon, `estate.json` `hives[]` (RAPP proposal
@@ -168,7 +170,7 @@ PUBLISHED.md or a pointer lists.
 - A shared device, such as a kiosk, must not hold a member key.
 - A plan proposed in one chat tab can be applied from another on the same device. Plain editors check nothing.
 - A remote reference is only as honest as the PUBLISHED.md at its pinned commit: the raw server is trusted only as far as
-  the listed hashes, and nothing signs that listing until the estate that pins the root is anchored. A public copy that
-  moves is never read; pin a newer commit to see newer files.
+  the listed hashes, and nothing signs that listing until a signed entry of the estate's registry covers the root. A
+  public copy that moves is never read; pin a newer commit to see newer files.
 - A station named like an instruction file (`agents`, `claude`, `gemini`, `skill`, `copilot-instructions`) cannot have a
   pointer: `members/agents.md` is refused like any `AGENTS.md`.
