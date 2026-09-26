@@ -1,5 +1,9 @@
 # Contoso Model Hive
 
+<!-- rapp1:network-header:start -->
+[![RAPP/1](https://kody-w.github.io/rapp-hive-public/portfolio/badges/rapp-model-hive.svg)](https://github.com/kody-w/rapp-hive-public/blob/main/portfolio/repos/rapp-model-hive.md) · **New to RAPP?** [Start here: get your Brainstem →](https://github.com/kody-w/rapp-installer#start-here)
+<!-- rapp1:network-header:end -->
+
 **A model Hive, like a model home: everything is furnished so you can walk through it, but nobody lives here.**
 
 > [!WARNING]
