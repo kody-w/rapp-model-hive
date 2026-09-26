@@ -1442,11 +1442,17 @@ class RemoteMembers(HiveTest):
                            (f"ftp://contoso.example/contoso/hive-public/{pinned}/", "only https://"),
                            (f"file:///contoso/hive-public/{pinned}/", "only https://"),
                            (f"https://contoso.example/contoso/../hive-public/{pinned}/", "plain parts"),
-                           (f"https://contoso.example/contoso/hive-public/{pinned}", "plain parts")):
+                           (f"https://contoso.example/contoso/hive-public/{pinned}", "plain parts"),
+                           (f"https://raw.githubusercontent.com/fabrikam/drafts/main/contoso/hive-public/{pinned}/",
+                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),  # another repo's branch
+                           (f"https://raw.githubusercontent.com:443/contoso/hive-public/{pinned}/",
+                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),  # spelled with a port
+                           (f"https://raw.githubusercontent.com/contoso/{pinned}/",
+                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/")):
             with self.subTest(url=url):
                 self.not_done(self.A.say(action="reference", label="contoso", url=url), words)
         for url in (f"https://contoso.example/contoso/hive-public/{pinned}/", f"http://localhost:8080/contoso/hive-public/{pinned}/",
-                    self.root_url):
+                    f"https://raw.githubusercontent.com/contoso/hive-public/{pinned}/", self.root_url):
             self.assertIn("Done: reference contoso is pinned", self.A.do(action="reference", label="contoso", url=url))
         self.assertEqual(ha.load(ha.Hive(self.A.home, be.HIVE).st("references.json")), {"contoso": self.root_url})  # on this device ...
         self.assertFalse(any("references" in p for p in ha.tree(self.A.hive, ha.rev(self.A.hive, "HEAD"))))  # ... never committed
@@ -1631,11 +1637,15 @@ class RemoteMembers(HiveTest):
                        pointer.replace("line: contoso-core", "line: Contoso-Core"),  # a line id
                        pointer.replace("line: contoso-core\n", "line: contoso-core\nalso_on:\n  - contoso-z\n  - contoso-a\n"),  # unsorted
                        pointer.replace("line: contoso-core\n", "line: contoso-core\nalso_on:\n  - contoso-a\n  - contoso-a\n"),  # twice
-                       pointer.replace("raw: https://raw.githubusercontent.com/contoso/protocol/",
-                                       "raw: https://raw.githubusercontent.com/fabrikam/drafts/contoso/protocol/"),  # GitHub raw: exactly its repo
                        pointer.replace("station: protocol", "station: installer")):  # not its file's name
             with self.subTest(broken=broken[:300]):
                 self.assertIn("not a station pointer", ha.pointer("members/protocol.md", broken, root))
+        for raw in ("https://raw.githubusercontent.com/fabrikam/drafts/contoso/protocol/",  # GitHub raw: exactly its repo
+                    "https://raw.githubusercontent.com:443/contoso/protocol/"):  # and spelled without a port
+            with self.subTest(raw=raw):
+                self.assertIn("its raw address is refused: on raw.githubusercontent.com it is exactly", ha.pointer(
+                    "members/protocol.md", pointer.replace("raw: https://raw.githubusercontent.com/contoso/protocol/",
+                                                           f"raw: {raw}"), root))
         self.assertIn("not a station pointer", ha.pointer("members/contoso.protocol.md", pointer.replace(
             "station: protocol", "station: contoso.protocol"), root))  # the operator's own repo is named without its owner
         for name, repo, extra in (("fabrikam.agents", "fabrikam/agents", ""), ("fabrikam.CLAUDE", "fabrikam/CLAUDE", ""),

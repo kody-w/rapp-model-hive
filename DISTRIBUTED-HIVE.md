@@ -307,7 +307,7 @@ The chain above the root is RAPP's: Constitution Article XLVII, and the seed, be
 |---|---|
 | `hive` | the Hive id: 32 lowercase hex, equal to the `hive:` of the root's `PUBLISHED.md` |
 | `name` | a short name for people: 1 to 100 characters on one line, within HIVE-MD's text rules |
-| `root` | the raw base of the Hive's public copy, ending in `/` |
+| `root` | the raw base of the Hive's public copy, ending in `/`; on `https://raw.githubusercontent.com` exactly `https://raw.githubusercontent.com/<owner>/<repo>/`, spelled so, as a pointer's `raw` is (section 7) |
 | `commit` | the public copy's commit that the LTS walk reads: 40 lowercase hex |
 | `published_sha256` | the HIVE-MD hash of `PUBLISHED.md` at that commit: 64 lowercase hex |
 
@@ -328,10 +328,10 @@ An entry with any other member, or with a member of the wrong shape, is skipped 
 }
 ```
 
-Nothing is added to the seed or the beacon: a seed entry already has `reference_state.commit_pin` and `sha256`, and the beacon
-stays as Articles XLVII and XLVIII define it. For the seed, each beacon and each estate, a reader records the URL, whether it is
-pinned (it has a 40-hex commit part) and the SHA-256 of the bytes it read. It checks no hash above the root: hash anchoring
-starts at `hives[].published_sha256`.
+The chain adds no field to the seed or the beacon: a seed entry already has `reference_state.commit_pin` and `sha256`, a
+reader ignores an entry's other members, and the beacon stays as Articles XLVII and XLVIII define it. For the seed, each
+beacon and each estate, a reader records the URL, whether it is pinned (it has a 40-hex commit part) and the SHA-256 of the
+bytes it read. It checks no hash above the root: hash anchoring starts at `hives[].published_sha256`.
 
 ## 11. The lookup
 
@@ -367,9 +367,10 @@ and 1,000 stations), and honors `indexable: false`. Every station file is `unpin
 
 ### 11.3 Starting anywhere
 
-A walk may start at a beacon, at an estate, or at a Hive root given by its raw base and commit (and, to anchor it, its
-`published_sha256`). The stages above the start are `skipped`, and the result says where it started. A root read at a pinned
-commit without a `published_sha256` is still read, and the finding `root-not-anchored` says it was trusted on first read.
+A walk may start at a beacon, at an estate, or at a Hive root given by its raw base (held to section 10's rule for `root`)
+and commit (and, to anchor it, its `published_sha256`). The stages above the start are `skipped`, and the result says where
+it started. A root read at a pinned commit without a `published_sha256` is still read, and the finding `root-not-anchored`
+says it was trusted on first read.
 
 ### 11.4 Checking the walk against a release manifest (RAPP/1 rev-17 draft)
 
@@ -509,9 +510,10 @@ A station has `station`, `repo`, `hive`, `curated`, `line`, `also_on`, `channel`
 "lifecycle", "superseded_by", "indexable", "links", "shares", "rappid", "claims_hive"}`), `release` (`null`, or `{"component",
 "agrees"}`) and `findings`. For a curated station, `line`, `also_on`, `channel`, `lifecycle` and `superseded_by` are the
 pointer's; for an uncurated one, the card's (`null` when the card states none; `also_on` is then `[]`). With a manifest whose
-state is `checked` or `failed`, every station has `release: {"component": <id or null>, "agrees": <bool>}`, where `agrees` is
-`false` exactly when the station has a `release-drift`, `release-missing` or `door-of-record-drift` finding; otherwise `release`
-is `null`.
+state is `checked` or `failed`, every station that did not opt out has `release: {"component": <id or null>, "agrees": <bool>}`,
+where `agrees` is `false` exactly when the station has a `release-drift`, `release-missing` or `door-of-record-drift` finding;
+otherwise `release` is `null`. A station that opted out is only `{"repo", "indexable": false}`: its findings, drift included,
+stay out of the graph (section 8).
 
 The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 2026-09-25T00:00:00.000Z`:
 
@@ -791,8 +793,9 @@ The Hive agent, `agents/hive_agent.py`, reads the distributed Hive with two acti
 
 - `reference label=<label> url=<raw base at a commit> [sha256=<hash>]` pins a Hive root's public copy on this device, and never
   commits the pin. The address is `https://<host>/<path>/<40-hex commit>/` (`http` only to `127.0.0.1` or `localhost`), with no
-  user name, query or fragment. With `sha256=`, the `published_sha256` of the estate's `hives[]` entry, `PUBLISHED.md` must
-  match it or nothing is read.
+  user name, query or fragment; on `raw.githubusercontent.com` it is exactly
+  `https://raw.githubusercontent.com/<owner>/<repo>/<40-hex commit>/`, with no port. With `sha256=`, the `published_sha256` of
+  the estate's `hives[]` entry, `PUBLISHED.md` must match it or nothing is read.
 - `resolve ref=<label>` reads each station the root points to at its pointer's `lts` commit into this device's cache, each file
   checked as section 5.2 says. It replies with the stations verified, those not pinned, every problem, and whether the root was
   anchored by a given hash or trusted on first read. It commits nothing.
@@ -858,7 +861,7 @@ the one in section 15.
 | Code | Meaning |
 |---|---|
 | `bad-node` | a seed entry or federation hint names neither a handle nor a beacon URL |
-| `hive-entry-invalid` | an `estate.json` `hives[]` entry does not have exactly the five members of section 10 |
+| `hive-entry-invalid` | an `estate.json` `hives[]` entry does not have exactly the five members of section 10, each of its shape |
 | `duplicate-hive` | the same Hive is listed twice |
 | `root-not-anchored` | a Hive root was read at a pinned commit without a `published_sha256`: trusted on first read |
 | `bad-path` | the root lists a path that is not a portable `.md` path of at most 120 characters, or not a station name |
@@ -879,7 +882,7 @@ the one in section 15.
 | `integrity-failed` | a station that opted out of indexes failed a check (the details stay out of the graph) |
 | `release-not-anchored` | a release manifest checked without `--manifest-hash`: trusted on first read |
 | `release-drift` | a pointer or a Hive root disagrees with the release manifest |
-| `release-missing` | a curated LTS station that the release manifest does not pin |
+| `release-missing` | a curated LTS station of a Hive whose root the release manifest pins, and whose repository it does not pin |
 | `door-of-record-drift` | a release component's door of record disagrees with the station's card |
 
 ## 22. The synthetic test network

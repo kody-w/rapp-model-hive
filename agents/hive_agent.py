@@ -1095,7 +1095,8 @@ def old_requests(root):
 # ---- remote references: a public copy read at a pinned commit, over plain raw URLs ------------
 
 # Why `url` cannot be read as a raw base, or None: https (http only to this device), no user name,
-# query or fragment, plain parts ending in /, and, when `pinned`, a full 40-hex commit last.
+# query or fragment, plain parts ending in /, on GitHub raw exactly <owner>/<repo>/ (and no port),
+# and, when `pinned`, a full 40-hex commit last.
 def url_refusal(url, pinned=True):
     scheme, _, rest = str(url).partition("://")
     host, _, path = rest.partition("/")
@@ -1108,6 +1109,10 @@ def url_refusal(url, pinned=True):
         (not re.fullmatch(r"[a-z0-9.-]+(:[0-9]{1,5})?", host)
          or not re.fullmatch(r"([A-Za-z0-9_-][A-Za-z0-9._-]*/)+", path),
          "it is not a raw address of plain parts that ends in /"),
+        (host.split(":")[0] == "raw.githubusercontent.com" and (
+            host != "raw.githubusercontent.com" or path.count("/") != 2 + pinned),
+         "on raw.githubusercontent.com it is exactly https://raw.githubusercontent.com/<owner>/"
+         "<repo>/" + "<commit>/" * pinned),
         (pinned and not re.fullmatch(r".+/[0-9a-f]{40}/", path),
          "its last part is not a full 40-hex commit, so what it shows could change")) if bad), None)
 
@@ -1209,8 +1214,6 @@ def pointer(path, text, root):
             or str(meta.get("superseded_by")).lower() == meta["repo"].lower()
             or meta["raw"].lower().rstrip("/").split("/")[-2:] != meta["repo"].lower().split("/")
             or meta["repo"].split("/")[1].lower() + ".md" in INSTRUCTION_NAMES
-            or meta["raw"].lower().startswith("https://raw.githubusercontent.com/")
-            and meta["raw"].count("/") != 5
             or station != (meta["repo"].split("/")[1] if meta["repo"].split("/")[0].lower()
                            == (root.split("/")[-4].lower() if root.count("/") > 5 else None)
                            else meta["repo"].replace("/", "."))

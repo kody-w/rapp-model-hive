@@ -115,7 +115,9 @@ reads and their hashes, how a reader finds them from a seed, and what the networ
 Hive agent does with them.
 
 A **remote reference** is pinned with `url=`: a clean public copy's raw base at a full 40-hex commit
-(`https://<host>/<path>/<commit>/`; `http` only to this device; no user name, query or fragment). It may also be pinned with
+(`https://<host>/<path>/<commit>/`, and on `raw.githubusercontent.com` exactly
+`https://raw.githubusercontent.com/<owner>/<repo>/<commit>/`; `http` only to this device; no user name, port on GitHub raw,
+query or fragment). It may also be pinned with
 `sha256=`, the hash of its PUBLISHED.md (the `published_sha256` of its estate's `hives[]` entry); then a PUBLISHED.md that
 does not match it is refused, and nothing of the copy is read. Reading it fetches PUBLISHED.md there, then each file it
 lists, never following a redirect; a file is kept only if it is at most 1 MB, passes the text rules above and matches its
