@@ -1095,8 +1095,8 @@ def old_requests(root):
 # ---- remote references: a public copy read at a pinned commit, over plain raw URLs ------------
 
 # Why `url` cannot be read as a raw base, or None: https (http only to this device), no user name,
-# query or fragment, plain parts ending in /, on GitHub raw exactly <owner>/<repo>/ (and no port),
-# and, when `pinned`, a full 40-hex commit last.
+# query or fragment, a host not ending in ., plain parts ending in /, on GitHub raw exactly
+# <owner>/<repo>/ (and no port), and, when `pinned`, a full 40-hex commit last.
 def url_refusal(url, pinned=True):
     scheme, _, rest = str(url).partition("://")
     host, _, path = rest.partition("/")
@@ -1106,7 +1106,7 @@ def url_refusal(url, pinned=True):
          "http:// is only for this device (127.0.0.1 or localhost); use https://"),
         ("@" in host, "it holds a user name or password"),
         ("?" in str(url) or "#" in str(url), "it has a query (?) or a fragment (#)"),
-        (not re.fullmatch(r"[a-z0-9.-]+(:[0-9]{1,5})?", host)
+        (not re.fullmatch(r"[a-z0-9.-]*[a-z0-9-](:[0-9]{1,5})?", host)
          or not re.fullmatch(r"([A-Za-z0-9_-][A-Za-z0-9._-]*/)+", path),
          "it is not a raw address of plain parts that ends in /"),
         (host.split(":")[0] == "raw.githubusercontent.com" and (
@@ -1166,6 +1166,8 @@ def pull(cache, wanted):
 def remote(cache, base):
     (top, index), (base, _, anchor) = ((os.path.join(cache, "PUBLISHED.md"),
                                         os.path.join(cache, ".origins.json")), base.partition("#"))
+    if why := url_refusal(base):  # a pin kept from before a rule: read no more of it
+        raise Refused(f"it was pinned at an address that is read no longer ({why}); pin it again")
     data = read(top) if os.path.isfile(top) else fetch(base + "PUBLISHED.md")
     text_rules("PUBLISHED.md", data, names=lambda _: None)
     if anchor and sha(norm(data)) != anchor:

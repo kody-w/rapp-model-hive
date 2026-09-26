@@ -199,7 +199,7 @@ Superseded by fabrikam/weather-next. The Contoso Hive reads it at `HEAD` only.
 | `member` | yes | its repository's own name (never `<owner>.<repo>`) |
 | `repo` | yes | `<owner>/<repo>`: the repository it is read from |
 | `hive` | yes | the id of the Hive it belongs to: 32 lowercase hex |
-| `hive_root` | yes | the raw base of that Hive's public copy, ending in `/` |
+| `hive_root` | yes | the raw base of that Hive's public copy, ending in `/`, held to section 10's rule for `root` |
 | `what` | yes | what it is, in one line of 1 to 200 characters |
 | `line` | yes | its line id |
 | `also_on` | no | as in the pointer |
@@ -449,9 +449,9 @@ chain, is all a reader checks.
 - Redirects are refused. Requests carry a `User-Agent`, and never credentials or cookies.
 - **Transport policy**, an origin allow-list like `sniff_network.py`'s, with these defaults: allowed are
   `https://raw.githubusercontent.com` and the start URL's origin, and the origins and `file://` folders the user adds. A URL
-  outside the policy is never fetched (`outside-policy`), and neither is a URL with a user name, a query, a fragment, a `.` or
-  `..` part, a backslash or a NUL, a character outside ASCII (a raw URL percent-encodes any other letter), or a scheme other
-  than `https`, `http` or `file`.
+  outside the policy is never fetched (`outside-policy`), and neither is a URL with a user name, a query, a fragment, a host
+  that ends in `.` (a second spelling of a host, which some servers answer), a `.` or `..` part, a backslash or a NUL, a
+  character outside ASCII (a raw URL percent-encodes any other letter), or a scheme other than `https`, `http` or `file`.
 
 ## 14. The resolver: commands and exit codes
 
@@ -513,7 +513,7 @@ pointer's; for an uncurated one, the card's (`null` when the card states none; `
 state is `checked` or `failed`, every station that did not opt out has `release: {"component": <id or null>, "agrees": <bool>}`,
 where `agrees` is `false` exactly when the station has a `release-drift`, `release-missing` or `door-of-record-drift` finding;
 otherwise `release` is `null`. A station that opted out is only `{"repo", "indexable": false}`: its findings, drift included,
-stay out of the graph (section 8).
+stay out of the graph (section 8), and only `integrity-failed` names it, without details (section 21).
 
 The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 2026-09-25T00:00:00.000Z`:
 
@@ -720,10 +720,10 @@ member_cards.py plan     --portfolio DIR --family FILE --clones DIR [--out FILE]
 
 `card`, `cards` and `plan` take `--lts-pins` and check the file, but no card depends on a pin.
 
-Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, `--hive-name`, `--subway-url` and `--start-url`
-(and `pointers` takes `--raw-prefix`, to which `<owner>/<repo>/` is added for each `raw`, so on
-`https://raw.githubusercontent.com` it is exactly `https://raw.githubusercontent.com/`), which default to the values of the
-network the tool is built for.
+Every command also takes the template flags `--owner`, `--hive`, `--hive-root` (held to section 10's rule for `root`),
+`--hive-name`, `--subway-url` and `--start-url` (and `pointers` takes `--raw-prefix`, to which `<owner>/<repo>/` is added for
+each `raw`, so on `https://raw.githubusercontent.com` it is exactly `https://raw.githubusercontent.com/`), which default to the
+values of the network the tool is built for.
 
 **Inputs.**
 
@@ -795,7 +795,8 @@ The Hive agent, `agents/hive_agent.py`, reads the distributed Hive with two acti
   commits the pin. The address is `https://<host>/<path>/<40-hex commit>/` (`http` only to `127.0.0.1` or `localhost`), with no
   user name, query or fragment; on `raw.githubusercontent.com` it is exactly
   `https://raw.githubusercontent.com/<owner>/<repo>/<40-hex commit>/`, with no port. With `sha256=`, the `published_sha256` of
-  the estate's `hives[]` entry, `PUBLISHED.md` must match it or nothing is read.
+  the estate's `hives[]` entry, `PUBLISHED.md` must match it or nothing is read. A pin whose address these rules no longer
+  take, kept from an older agent, is refused when it is read, before any fetch: pin it again.
 - `resolve ref=<label>` reads each station the root points to at its pointer's `lts` commit into this device's cache, each file
   checked as section 5.2 says. It replies with the stations verified, those not pinned, every problem, and whether the root was
   anchored by a given hash or trusted on first read. It commits nothing.

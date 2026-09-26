@@ -1448,7 +1448,11 @@ class RemoteMembers(HiveTest):
                            (f"https://raw.githubusercontent.com:443/contoso/hive-public/{pinned}/",
                             "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),  # spelled with a port
                            (f"https://raw.githubusercontent.com/contoso/{pinned}/",
-                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/")):
+                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),
+                           (f"https://raw.githubusercontent.com:8443/contoso/hive-public/{pinned}/",
+                            "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),  # any port
+                           (f"https://raw.githubusercontent.com./contoso/hive-public/{pinned}/", "plain parts"),
+                           (f"https://contoso.example./contoso/hive-public/{pinned}/", "plain parts")):  # a final dot
             with self.subTest(url=url):
                 self.not_done(self.A.say(action="reference", label="contoso", url=url), words)
         for url in (f"https://contoso.example/contoso/hive-public/{pinned}/", f"http://localhost:8080/contoso/hive-public/{pinned}/",
@@ -1456,6 +1460,17 @@ class RemoteMembers(HiveTest):
             self.assertIn("Done: reference contoso is pinned", self.A.do(action="reference", label="contoso", url=url))
         self.assertEqual(ha.load(ha.Hive(self.A.home, be.HIVE).st("references.json")), {"contoso": self.root_url})  # on this device ...
         self.assertFalse(any("references" in p for p in ha.tree(self.A.hive, ha.rev(self.A.hive, "HEAD"))))  # ... never committed
+
+    def test_a_pin_kept_from_before_an_address_rule_is_read_no_more(self):
+        """A reference pinned before a rule existed, here a GitHub raw root with parts before its owner
+        (which the agent before f05aef5 took), is refused when it is read, before any fetch: pin it again."""
+        deep = "https://raw.githubusercontent.com/fabrikam/drafts/main/contoso/hive-public/" + "c" * 40 + "/"
+        ha.dump(ha.Hive(self.A.home, be.HIVE).st("references.json"), {"old": deep})
+        start = len(self.raw.requests)
+        for action in ("list", "resolve"):
+            with self.subTest(action=action):
+                self.not_done(self.A.say(action=action, ref="old"), "pinned at an address that is read no longer")
+        self.assertEqual(self.raw.requests[start:], [])
 
     def test_a_public_copy_is_read_file_by_file_each_checked_and_fenced(self):
         start = len(self.raw.requests)
@@ -1659,9 +1674,10 @@ class RemoteMembers(HiveTest):
                 self.assertIn("not a station pointer", ha.pointer(f"members/{name}.md", text, root))
         self.assertIn("not a station pointer", ha.pointer("members/protocol..md", pointer.replace("station: protocol", "station: protocol.").replace(
             "repo: contoso/protocol", "repo: contoso/protocol.").replace("contoso/protocol/", "contoso/protocol./"), root))  # no trailing dot
-        bare = "https://raw.githubusercontent.com/hive/" + "c" * 40 + "/"  # one path part: it names no operator
-        self.assertIn("not a station pointer", ha.pointer("members/protocol.md", pointer, bare))
-        self.assertIsInstance(ha.pointer("members/contoso.protocol.md", pointer.replace(
+        bare = "https://contoso.example/hive/" + "c" * 40 + "/"  # one path part: it names no operator
+        here = pointer.replace("https://raw.githubusercontent.com/", "https://contoso.example/")  # on the root's host
+        self.assertIn("not a station pointer", ha.pointer("members/protocol.md", here, bare))
+        self.assertIsInstance(ha.pointer("members/contoso.protocol.md", here.replace(
             "station: protocol", "station: contoso.protocol"), bare), tuple)
         for kept in (pointer.replace("lifecycle: active", "lifecycle: deprecated"),
                      pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: contoso/protocol-2")):
