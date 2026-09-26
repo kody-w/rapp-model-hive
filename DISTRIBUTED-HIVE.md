@@ -32,7 +32,7 @@ Hashes give integrity only. Until a signed entry of the estate's RAPP/1 registry
 | raw base | an absolute URL ending in `/`, to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/` |
 | ref | a full 40-hex commit (pinned), or `HEAD` or a branch name (moving) |
 | channel | `rapp1-lts`, read at pinned LTS commits, or `newest`, read at `HEAD` |
-| operator | a Hive root's owner: the first of the last two path parts of its raw base (`contoso`) |
+| operator | a Hive root's owner: the first of the last two path parts of its raw base (`contoso`); a raw base with fewer than two path parts names none, and each of its stations is `<owner>.<repo>` |
 | locator | a file that says where to look: a seed, a beacon, `estate.json`, a Hive root, a pointer, a card |
 
 ## 3. Names
@@ -140,8 +140,8 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 | `lifecycle` | yes | `active`, `deprecated`, `superseded` or `archived` (section 9) |
 | `superseded_by` | with `superseded` | its successor's `<owner>/<repo>`; allowed with `deprecated` or `archived`, never with `active`, never its own repo |
 
-**The LTS manifest.** Every body line of the form `<64 lowercase hex><two spaces><path>`, where `<path>` does not start with a
-space, is a manifest line. With `lts`, the
+**The LTS manifest.** Every body line of the form `<64 lowercase hex><two spaces><path>`, where `<path>` does not start with
+whitespace (any character Python's `str.strip()` removes, as in section 6), is a manifest line. With `lts`, the
 body has 1 to 200 of them: each path once, sorted by path, no two that differ only by case (after dropping a leading
 `.rapp/`), and each hash that file's hash (section 5.2) at the LTS commit. Writers list only paths of the readable set, and
 list `.rapp/member.md` whenever it exists at the LTS commit; a reader refuses a listed path outside the readable set before
@@ -462,7 +462,8 @@ hive_resolve.py pulse --graph FILE --stream-rappid RAPPID [--prev FRAME.json] --
 - `resolve` walks and writes `graph.json` (section 15) and, with `--out`, a snapshot (section 16). The default start is the
   network's seed. `--offline` reads only the cache, `--refresh` asks again even for pinned URLs, and `--fixed-time` makes the
   output repeat byte for byte.
-- `validate` checks one card or pointer file (sections 6 to 8).
+- `validate` checks one card or pointer file (sections 6 to 8). A file names no Hive root, so a pointer's name must be one of
+  the two names section 3 gives its repo (`<repo>` or `<owner>.<repo>`); a walk checks which.
 - `pulse-payload` and `pulse`: section 17.
 - **Exit codes:** `0`, the walk finished with no integrity failure (unverified is not a failure); `1`, a `mismatch`, `missing`
   or `refused` file among the Hive roots or the curated stations, a root that did not match its pin, or a release that did not
@@ -737,7 +738,8 @@ The generator writes no `version` and no card `channel`: they would go stale in 
 
 - `card` prints one card, or writes it to `<checkout>/.rapp/member.md`; with `--check` it exits `1` when the file there differs.
 - `cards` writes `<out>/<repo>/.rapp/member.md` for many repositories, and `<out>/cards.json` (`rapp-hive-cards/1`).
-- `pointers` writes `<out>/members/<station>.md` for each repository in the portfolio, and `<out>/pointers.json`
+- `pointers` writes `<out>/members/<station>.md` for each repository in the portfolio, named by its repo's station name in the
+  Hive root at `--hive-root` (section 3), and `<out>/pointers.json`
   (`rapp-hive-pointers/1`). For a pinned repository it lists each readable file at the LTS commit, read with
   `git show <commit>:<path>` from a local clone, with its hash; a file that is not normalized text is left out and named. When
   the pins come from a release manifest, a file both list must have the same hash, else the pointer is refused, and
@@ -846,7 +848,7 @@ the one in section 15.
 | `instruction-file-name` | a pointer or a link names a repository named like an AI instruction file |
 | `outside-policy` | a URL the transport policy does not allow: never fetched |
 | `pointer-invalid` | a listed pointer does not follow section 7 |
-| `duplicate-station` | a second pointer for a repository that already has one (a listing with two names that differ only by case is refused whole) |
+| `duplicate-station` | a second pointer for a repository that already has one; with the name rule such a pair differs only by case, and a listing with two names that differ only by case is refused whole, so a reader that follows section 11.1 never reaches it |
 | `max-stations` | beyond the station limit: not walked |
 | `mismatch`, `missing`, `refused`, `unreachable` | a file in that state (section 12) |
 | `no-card` | a pointer's manifest does not list `.rapp/member.md`, or a station has no card at `HEAD` |

@@ -1207,7 +1207,8 @@ def pointer(path, text, root):
             or str(meta.get("superseded_by")).lower() == meta["repo"].lower()
             or meta["raw"].lower().rstrip("/").split("/")[-2:] != meta["repo"].lower().split("/")
             or station != (meta["repo"].split("/")[1] if meta["repo"].split("/")[0].lower()
-                           == root.split("/")[-4].lower() else meta["repo"].replace("/", "."))
+                           == (root.split("/")[-4].lower() if root.count("/") > 5 else None)
+                           else meta["repo"].replace("/", "."))
             or list(places) != sorted(q for q, _ in rows) or case_clash(places.values())):
         return "it is not a station pointer (DISTRIBUTED-HIVE.md, section 7)"
     why, ok = (url_refusal(meta["raw"], pinned=False) or meta["raw"].split("/")[:3]

@@ -1628,6 +1628,10 @@ class RemoteMembers(HiveTest):
                 self.assertIn("not a station pointer", ha.pointer("members/protocol.md", broken, root))
         self.assertIn("not a station pointer", ha.pointer("members/contoso.protocol.md", pointer.replace(
             "station: protocol", "station: contoso.protocol"), root))  # the operator's own repo is named without its owner
+        bare = "https://raw.githubusercontent.com/hive/" + "c" * 40 + "/"  # one path part: it names no operator
+        self.assertIn("not a station pointer", ha.pointer("members/protocol.md", pointer, bare))
+        self.assertIsInstance(ha.pointer("members/contoso.protocol.md", pointer.replace(
+            "station: protocol", "station: contoso.protocol"), bare), tuple)
         for kept in (pointer.replace("lifecycle: active", "lifecycle: deprecated"),
                      pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: contoso/protocol-2")):
             self.assertIsInstance(ha.pointer("members/protocol.md", kept, root), tuple)
