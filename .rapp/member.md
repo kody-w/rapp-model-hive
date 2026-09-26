@@ -9,6 +9,9 @@ also_on:
   - rapp1-core
 links:
   - rapp-1
+  - rapp-hive-public
+  - rapp-map
+  - rapp-work
   - rapp-workspace
 ---
 
@@ -17,7 +20,7 @@ links:
 A synthetic model Hive, like a model home: walk through the experimental rapp-hive/2 draft in your browser, a tour or your AI. Fictional people, public test keys.
 
 - Line: **Hive**, also on **RAPP/1 Core**, on the [RAPP/1 subway map](https://kody-w.github.io/rapp-hive-public/portfolio/subway.html).
-- Neighbors: [rapp-1](https://github.com/kody-w/rapp-1), [rapp-workspace](https://github.com/kody-w/rapp-workspace).
+- Neighbors: [rapp-1](https://github.com/kody-w/rapp-1), [rapp-hive-public](https://github.com/kody-w/rapp-hive-public), [rapp-map](https://github.com/kody-w/rapp-map), [rapp-work](https://github.com/kody-w/rapp-work), [rapp-workspace](https://github.com/kody-w/rapp-workspace).
 - New to RAPP? [Start here: get your Brainstem](https://github.com/kody-w/rapp-installer#start-here).
 
 This is this repo's card in the RAPP Hive. Change it with an ordinary commit here; the Hive reads it at this
