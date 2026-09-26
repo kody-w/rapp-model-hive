@@ -29,7 +29,7 @@ Hashes give integrity only. Until a signed entry of the estate's RAPP/1 registry
 | Hive root | a Hive's clean public copy: `PUBLISHED.md`, whose `hive:` is its Hive id (32 lowercase hex), and the files it lists, and no `HIVE.md` |
 | pointer | `members/<station>.md` in a Hive root: the curator's pin of one station |
 | card | `.rapp/member.md` in a station: the station's own description of itself |
-| raw base | an absolute URL ending in `/`, to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/` |
+| raw base | an absolute URL ending in `/`, with no empty path part (no `//`), to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/`; on `https` or `http`, each path part is a plain name, `[A-Za-z0-9_-][A-Za-z0-9._-]*` |
 | ref | a full 40-hex commit (pinned), or `HEAD` or a branch name (moving) |
 | channel | `rapp1-lts`, read at pinned LTS commits, or `newest`, read at `HEAD` |
 | operator | a Hive root's owner: the first of the last two path parts of its raw base (`contoso`); a raw base with fewer than two path parts names none, and each of its stations is `<owner>.<repo>` |
@@ -132,7 +132,7 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 |---|---|---|
 | `station` | yes | the file's name without `.md`, which must be `repo`'s station name (section 3); a pointer whose name is not is `pointer-invalid` |
 | `repo` | yes | `<owner>/<repo>` |
-| `raw` | yes | the raw base it is read from; its last two path parts are `repo`'s owner and name (compared without case), and a raw base on `https://raw.githubusercontent.com` is exactly `https://raw.githubusercontent.com/<owner>/<repo>/` |
+| `raw` | yes | the raw base it is read from; its last two path parts are `repo`'s owner and name (compared without case), and a raw base on `https://raw.githubusercontent.com` is exactly `https://raw.githubusercontent.com/<owner>/<repo>/`, the origin spelled so (no capitals, no port) and nothing before or after those two parts |
 | `lts` | with `rapp1-lts` | its LTS commit, 40 lowercase hex; there exactly when `channel` is `rapp1-lts` |
 | `newest` | yes | `HEAD`, or a branch name of 1 to 100 of `A-Z a-z 0-9 . _ -` that does not start with `.`, holds no `..` and does not end in `.` or `.lock` |
 | `line` | yes | its line id |
@@ -387,7 +387,8 @@ So a resolver may take a release manifest (`--release-manifest`, with the `manif
    the section 9.1 path grammar and its collisions, digests, sizes, and at most one door-of-record binding per rappid), in the
    order rev-17's `verify_release_manifest` uses.
 2. For each component whose `repository` is `https://github.com/<owner>/<repo>`, it fetches every pinned file at
-   `<release raw prefix><owner>/<repo>/<commit>/<path>` (the prefix is `https://raw.githubusercontent.com/` unless given) and
+   `<release raw prefix><owner>/<repo>/<commit>/<path>` (the prefix is `https://raw.githubusercontent.com/` unless given, and a
+   prefix given on that origin is exactly it, since `<prefix><owner>/<repo>/` is a raw base, section 7) and
    checks its length and SHA-256. A file of a component elsewhere is `refused`. When every file matched, each door-of-record
    binding is checked: the `identity_path` file is a JSON object whose `rappid` is the component's and whose `schema`, when
    present, is `rapp/1`. One failed file or binding fails the whole release, and then none of it is kept. A release that pins
@@ -433,7 +434,8 @@ chain, is all a reader checks.
   200 files per station; 5,000 files per Hive root listing and per release (a larger one is refused before any fetch); 1,000
   stations; 3 hops; 15 seconds per request, from connecting to its last byte (a request still under way then is cut off, and
   that is a timeout; the name lookup before it is left to the system).
-- At most 4 requests at once (at most 8 by choice) and 8 requests a second in all.
+- At most 4 requests at once (at most 8 by choice) and 8 requests a second in all to hosts off this device; only requests to
+  its own loopback address (`127.0.0.1`, `localhost`, `::1`), which a test network serves, may go faster.
 - A 429, 500, 502, 503 or 504, a timeout or a reset connection is retried, up to 4 attempts in all, with backoff and jitter
   (0.5 s, 1 s, 2 s), honoring `Retry-After` up to 60 s. A 404 is final (`missing`); any other answer is final.
 - A cache keeps one entry per URL. A URL at a 40-hex commit never changes, so a cached copy that matches its pin (or that
@@ -463,7 +465,8 @@ hive_resolve.py pulse --graph FILE --stream-rappid RAPPID [--prev FRAME.json] --
 
 - `resolve` walks and writes `graph.json` (section 15) and, with `--out`, a snapshot (section 16). The default start is the
   network's seed. `--offline` reads only the cache, `--refresh` asks again even for pinned URLs, and `--fixed-time` makes the
-  output repeat byte for byte.
+  output repeat byte for byte. `--rate` above 8 is a usage error unless the walk starts on this device (a loopback address or a
+  `file://` URL).
 - `validate` checks one card or pointer file (sections 6 to 8). A file names no Hive root, so a pointer's name must be one of
   the two names section 3 gives its repo (`<repo>` or `<owner>.<repo>`); a walk checks which.
 - `pulse-payload` and `pulse`: section 17.
@@ -487,7 +490,7 @@ print. Lists are sorted too, so the same network, flags and
 | `authenticity` | `{"state": "unverified", "reason": "estate-not-anchored"}` |
 | `started_at` | `{"stage", "url"}`: `seed`, `beacon`, `estate` or `hive-root`, and its URL |
 | `chain` | one entry per stage and operator: `{"stage", "url", "status", "sha256", "pinned", "detail"}` |
-| `release` | `null`, or the release manifest checked (section 11.4): `{"url", "sha256", "manifest_hash", "expected_manifest_hash", "release_scope", "release", "components", "files", "verified", "state", "detail"}`, where `components`, `files` and `verified` are counts and `state` is `checked`, `failed`, `invalid`, `mismatch`, `missing`, `unreachable` or `refused` |
+| `release` | `null`, or the release manifest checked (section 11.4): `{"url", "sha256", "manifest_hash", "expected_manifest_hash", "release_scope", "release", "components", "files", "verified", "state", "detail"}`, where `url` is the manifest's URL, or `null` when it was read from a local file (a path of the device is never recorded), `components`, `files` and `verified` are counts, and `state` is `checked`, `failed`, `invalid`, `mismatch`, `missing`, `unreachable` or `refused` |
 | `hives` | one per Hive root read: `{"hive", "name", "root", "ref", "published_sha256", "stations", "former"}` |
 | `stations` | one per station (below), or `{"repo", "indexable": false}` for a station that opted out |
 | `edges` | `{"from", "to", "kind"}`, where `kind` is `link` or `superseded-by` |
@@ -671,11 +674,12 @@ DIR/release/<component id>/<path>          every file it pins, only when every o
 ```
 
 `SNAPSHOT.json` has `schema`, `mode`, `accepted` (`false`), `authenticity`, `chain`, `release` (as in the graph), `files` (each
-`{"path", "url", "sha256", "state", "anchor"}`, where `anchor` names what pinned it: `estate.json hives[] published_sha256` or
-`--hive-published-sha256` for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a station's
-files, `release manifest` for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`,
-without one), or `null` when nothing pinned it), `skipped` (files not written, and why, in fixed words that name no path of the
-device, sorted by path; a release that did not check out adds one entry `release`), `graph_sha256` and `generated_at`.
+`{"path", "url", "sha256", "state", "anchor"}`, where `url` is the exact URL it was read from, or `null` for a release manifest
+read from a local file, and `anchor` names what pinned it: `estate.json hives[] published_sha256` or `--hive-published-sha256`
+for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a station's files, `release manifest`
+for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`, without one), or `null` when
+nothing pinned it), `skipped` (files not written, and why, in fixed words that name no path of the device, sorted by path; a
+release that did not check out adds one entry `release`), `graph_sha256` and `generated_at`.
 
 ## 17. Pulses
 
@@ -711,7 +715,9 @@ member_cards.py plan     --portfolio DIR --family FILE --clones DIR [--out FILE]
 `card`, `cards` and `plan` take `--lts-pins` and check the file, but no card depends on a pin.
 
 Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, `--hive-name`, `--subway-url` and `--start-url`
-(and `pointers` takes `--raw-prefix`), which default to the values of the network the tool is built for.
+(and `pointers` takes `--raw-prefix`, to which `<owner>/<repo>/` is added for each `raw`, so on
+`https://raw.githubusercontent.com` it is exactly `https://raw.githubusercontent.com/`), which default to the values of the
+network the tool is built for.
 
 **Inputs.**
 
@@ -743,20 +749,22 @@ card `channel`: they would go stale in the station's own files.
 - `card` prints one card, or writes it to `<checkout>/.rapp/member.md`; with `--check` it exits `1` when the file there differs.
 - `cards` writes `<out>/<repo>/.rapp/member.md` for many repositories, and `<out>/cards.json` (`rapp-hive-cards/1`).
 - `pointers` writes `<out>/members/<station>.md` for each repository in the portfolio, named by its repo's station name in the
-  Hive root at `--hive-root` (section 3), and `<out>/pointers.json`
-  (`rapp-hive-pointers/1`). For a pinned repository it lists each readable file at the LTS commit, read with
-  `git show <commit>:<path>` from a local clone, with its hash; a file that is not normalized text is left out and named. When
-  the pins come from a release manifest, a file both list must have the same hash, else the pointer is refused, and
-  `pointers.json` records its `release_manifest_hash`. A repository without a pin gets `channel: newest`, no `lts`, and the
-  body `# <station>`, then `[Superseded by <repo>. | Deprecated[; its successor is <repo>]. | Archived[; its successor is
-  <repo>]. ]The <hive name> reads it at `HEAD` only.`, as the second example of section 7.
+  Hive root at `--hive-root` (section 3), and `<out>/pointers.json` (`rapp-hive-pointers/1`). For a pinned repository it lists
+  each readable file at the LTS commit, read with `git show <commit>:<path>` from a local clone, with its hash; a file that is
+  not normalized text is left out and named, and so is a file whose name, or a folder's in its path, differs only by case from
+  one listed before it by path (after dropping a leading `.rapp/`, section 7). When the pins come from a release manifest, a
+  file both list must have the same hash, else the pointer is refused, and `pointers.json` records its `release_manifest_hash`.
+  A repository without a pin gets `channel: newest`, no `lts`, and the body `# <station>`, then `[Superseded by <repo>. |
+  Deprecated[; its successor is <repo>]. | Archived[; its successor is <repo>]. ]The <hive name> reads it at `HEAD` only.`, as
+  the second example of section 7.
 - `plan` writes `rapp-hive-card-plan/1`: `auto` or `hold` for each repository, with the reasons. It holds a repository that pins
   its tracked path set (a tracked file of any size with `tracked_path_count`, `tracked_path_set_sha256`, `path_set_sha256` or
   `tracked_paths`, or a `MANIFEST*` or `*INVENTORY*.json` file that lists at least half of the tracked paths, itself among them;
   such a file over 16 MiB is held as too large to check, and so is a repository whose clone cannot give a tracked file), that
-  has anything in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs, that is
-  empty, that is named like an instruction file, that has no local clone, or whose generated card would not validate. `pointers`
-  refuses a repository whose portfolio `channel` disagrees with its pin (`rapp1-lts` without a pin, or `newest` with one).
+  has anything in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs or cannot be
+  compared (over 1 MiB, or not readable from the clone), that is empty, that is named like an instruction file, that has no
+  local clone, or whose generated card would not validate. `pointers` refuses a repository whose portfolio `channel` disagrees
+  with its pin (`rapp1-lts` without a pin, or `newest` with one).
 
 The generated card's body, where `[...]` parts appear only when they apply:
 
