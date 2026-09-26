@@ -379,27 +379,31 @@ one immutable release in a **release manifest**, named by its
 Hive indexes and member pointers are **locators**: they may say where to look, content is verified only when a manifest pins
 it, and a locator that disagrees with the manifest is a drift finding, never a second opinion.
 
-So a resolver may take a release manifest (`--release-manifest`, with the `manifest_hash` its release pin names), and then:
+So a resolver may take a release manifest (`--release-manifest`, with the `manifest_hash` its release pin names): the release
+of the LTS channel, whose pins the pointers' `lts` copy. Then:
 
 1. It requires the manifest's bytes to be exactly its RAPP/1 canonical JSON, computes `manifest_hash =
    H("rapp/1:particle", manifest)` and compares it with the one given (else `mismatch`), and then checks its form by the
-   section 13.5 rules that need no registry (the members, the `release` name, `id` and `kind` grammar and order, commits, tags,
-   the section 9.1 path grammar and its collisions, digests, sizes, and at most one door-of-record binding per rappid), in the
-   order rev-17's `verify_release_manifest` uses.
+   section 13.5 rules that need no registry (the members, absolute HTTPS URIs by RFC 3986's grammar for `release_scope` and
+   `repository`, the `release` name, `id` and `kind` grammar and order, commits, tags as full tag names, ASCII paths of the
+   section 9.1 grammar and their collisions, digests, sizes, and at most one door-of-record binding per rappid), in the order
+   rev-17's `verify_release_manifest` uses.
 2. For each component whose `repository` is `https://github.com/<owner>/<repo>`, it fetches every pinned file at
    `<release raw prefix><owner>/<repo>/<commit>/<path>` (the prefix is `https://raw.githubusercontent.com/` unless given, and a
    prefix given on that origin is exactly it, since `<prefix><owner>/<repo>/` is a raw base, section 7) and
    checks its length and SHA-256. A file of a component elsewhere is `refused`. When every file matched, each door-of-record
-   binding is checked: the `identity_path` file is a JSON object whose `rappid` is the component's and whose `schema`, when
-   present, is `rapp/1`. One failed file or binding fails the whole release, and then none of it is kept. A release that pins
+   binding is checked: the `identity_path` file is UTF-8 without a byte-order mark or NUL, parses as a JSON object whose numbers
+   are integers of magnitude at most 2^53-1 written without fraction or exponent, and has the component's `rappid` and, when it
+   has a `schema`, `rapp/1`. One failed file or binding fails the whole release, and then none of it is kept. A release that pins
    more than 5,000 files is `refused` before any fetch. Without `--manifest-hash`, the manifest is trusted on first read
    (finding `release-not-anchored`).
 3. It cross-checks the locators. A curated station on `rapp1-lts` and the component with the same repository must agree on the
-   commit and on the hash of every path both list (else `release-drift`). A curated LTS station of a Hive whose root the
-   manifest pins, with no component, is `release-missing`. A component that binds a door of record (a `rappid`) must match the
-   card's `rappid` of every station read with that repository, where no card counts as no rappid (else `door-of-record-drift`).
-   A component whose repository is a Hive root's must pin the commit an LTS walk read that root at (else `release-drift`); a
-   newest walk compares stations by their pointers' `lts`, and roots not at all.
+   commit and on the hash of every path both list (else `release-drift`). A curated station on the newest channel whose
+   repository the manifest pins is `release-drift` too: its pointer has no LTS commit. A curated LTS station of a Hive whose
+   root the manifest pins, with no component, is `release-missing`. A component that binds a door of record (a `rappid`) must
+   match the card's `rappid` of every station read with that repository, where no card counts as no rappid (else
+   `door-of-record-drift`). A component whose repository is a Hive root's must pin the commit an LTS walk read that root at
+   (else `release-drift`); a newest walk compares stations by their pointers, and roots not at all.
 
 These are steps 2 and 3 of the section 13.5 snapshot. Step 1, verifying the owner-signed registry and selecting the release pin,
 is left to RAPP/1's reference implementation; this resolver checks no signature. So a checked release is still
