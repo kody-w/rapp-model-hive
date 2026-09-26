@@ -1097,7 +1097,7 @@ def old_requests(root):
 # Why `url` cannot be read as a raw base, or None: https (http only to this device), no user name,
 # query or fragment, a lowercase host not ending in . (a port at most 65535), plain parts ending
 # in /, on GitHub raw exactly <owner>/<repo>/ (no port), and, when `pinned`, a full 40-hex commit
-# after at least one part.
+# last (a root with no part before it names no operator).
 def url_refusal(url, pinned=True):
     scheme, _, rest = str(url).partition("://")
     host, _, path = rest.partition("/")
@@ -1115,9 +1115,8 @@ def url_refusal(url, pinned=True):
             host != "raw.githubusercontent.com" or path.count("/") != 2 + pinned),
          "on raw.githubusercontent.com it is exactly https://raw.githubusercontent.com/<owner>/"
          "<repo>/" + "<commit>/" * pinned),
-        (pinned and not re.fullmatch(r".+/[0-9a-f]{40}/", path),
-         "it does not end in a path part and a full 40-hex commit, so what it shows could change"))
-        if bad), None)
+        (pinned and not re.fullmatch(r"(.+/)?[0-9a-f]{40}/", path),
+         "its last part is not a full 40-hex commit, so what it shows could change")) if bad), None)
 
 
 def fetch(url):  # the bytes at a raw URL: at most 1 MB (never reading more), never redirected

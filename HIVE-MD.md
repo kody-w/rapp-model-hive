@@ -115,11 +115,11 @@ reads and their hashes, how a reader finds them from a seed, and what the networ
 Hive agent does with them.
 
 A **remote reference** is pinned with `url=`: a clean public copy's raw base at a full 40-hex commit
-(`https://<host>/<path>/<commit>/`, and on `raw.githubusercontent.com` exactly
+(`https://<host>/[<path>/]<commit>/`, and on `raw.githubusercontent.com` exactly
 `https://raw.githubusercontent.com/<owner>/<repo>/<commit>/`; `http` only to this device; a lowercase scheme and host,
-the host of letters, digits, `.` and `-`, not ending in `.`, with at most a port of digits up to 65535; no user name, port
-on GitHub raw, query or fragment; a pin kept from before a rule is read no more). It may also be pinned with
-`sha256=`, the hash of its PUBLISHED.md (the `published_sha256` of its estate's `hives[]` entry); then a PUBLISHED.md that
+the host of letters, digits, `.` and `-`, not ending in `.`, with at most a port of digits without a leading zero, up to
+65535; no user name, port on GitHub raw, query or fragment; a pin kept from before a rule is read no more). It may also
+be pinned with `sha256=`, the hash of its PUBLISHED.md (the `published_sha256` of its estate's `hives[]` entry); then a PUBLISHED.md that
 does not match it is refused, and nothing of the copy is read. Reading it fetches PUBLISHED.md there, then each file it
 lists, never following a redirect; a file is kept only if it is at most 1 MB, passes the text rules above and matches its
 listed hash. Anything else is left out and named, nothing unlisted is fetched, and a listing that names `HIVE.md`, a path

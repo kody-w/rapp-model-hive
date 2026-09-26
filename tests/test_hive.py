@@ -1438,7 +1438,6 @@ class RemoteMembers(HiveTest):
                            (f"https://contoso.example/contoso/hive-public/{pinned}/#top", "query (?) or a fragment (#)"),
                            ("https://contoso.example/contoso/hive-public/main/", "full 40-hex commit"),
                            (f"https://contoso.example/contoso/hive-public/{pinned[:12]}/", "full 40-hex commit"),
-                           (f"https://contoso.example/{pinned}/", "full 40-hex commit"),
                            (f"ftp://contoso.example/contoso/hive-public/{pinned}/", "only https://"),
                            (f"file:///contoso/hive-public/{pinned}/", "only https://"),
                            (f"https://contoso.example/contoso/../hive-public/{pinned}/", "plain parts"),
@@ -1458,12 +1457,12 @@ class RemoteMembers(HiveTest):
                            (f"HTTPS://contoso.example/contoso/hive-public/{pinned}/", "only https://"),  # scheme case
                            (f"https://contoso.example:/contoso/hive-public/{pinned}/", "plain parts"),  # empty port
                            (f"https://contoso.example:65536/contoso/hive-public/{pinned}/", "plain parts"),  # past 65535
-                           (f"https://contoso.example:08080/contoso/hive-public/{pinned}/", "plain parts"),  # a zero first
-                           (f"https://hive.contoso.example/{pinned}/", "a path part and a full 40-hex commit")):
+                           (f"https://contoso.example:08080/contoso/hive-public/{pinned}/", "plain parts")):  # a zero first
             with self.subTest(url=url):
                 self.not_done(self.A.say(action="reference", label="contoso", url=url), words)
         for url in (f"https://contoso.example/contoso/hive-public/{pinned}/", f"http://localhost:8080/contoso/hive-public/{pinned}/",
                     f"https://contoso.example:65535/contoso/hive-public/{pinned}/",
+                    f"https://hive.contoso.example/{pinned}/",  # no part before the commit: it names no operator (§2)
                     f"https://raw.githubusercontent.com/contoso/hive-public/{pinned}/", self.root_url):
             self.assertIn("Done: reference contoso is pinned", self.A.do(action="reference", label="contoso", url=url))
         self.assertEqual(ha.load(ha.Hive(self.A.home, be.HIVE).st("references.json")), {"contoso": self.root_url})  # on this device ...
@@ -1693,11 +1692,12 @@ class RemoteMembers(HiveTest):
                 self.assertIn("not a station pointer", ha.pointer(f"members/{name}.md", text, root))
         self.assertIn("not a station pointer", ha.pointer("members/protocol..md", pointer.replace("station: protocol", "station: protocol.").replace(
             "repo: contoso/protocol", "repo: contoso/protocol.").replace("contoso/protocol/", "contoso/protocol./"), root))  # no trailing dot
-        bare = "https://contoso.example/hive/" + "c" * 40 + "/"  # one path part: it names no operator
         here = pointer.replace("https://raw.githubusercontent.com/", "https://contoso.example/")  # on the root's host
-        self.assertIn("not a station pointer", ha.pointer("members/protocol.md", here, bare))
-        self.assertIsInstance(ha.pointer("members/contoso.protocol.md", here.replace(
-            "station: protocol", "station: contoso.protocol"), bare), tuple)
+        for bare in ("https://contoso.example/hive/" + "c" * 40 + "/", "https://contoso.example/" + "c" * 40 + "/"):
+            with self.subTest(bare=bare):  # one path part, or none: it names no operator
+                self.assertIn("not a station pointer", ha.pointer("members/protocol.md", here, bare))
+                self.assertIsInstance(ha.pointer("members/contoso.protocol.md", here.replace(
+                    "station: protocol", "station: contoso.protocol"), bare), tuple)
         for kept in (pointer.replace("lifecycle: active", "lifecycle: deprecated"),
                      pointer.replace("lifecycle: active", "lifecycle: archived\nsuperseded_by: contoso/protocol-2")):
             self.assertIsInstance(ha.pointer("members/protocol.md", kept, root), tuple)

@@ -792,7 +792,7 @@ repo's LTS commit, and at `HEAD` for the newest channel. It was generated from t
 The Hive agent, `agents/hive_agent.py`, reads the distributed Hive with two actions (HIVE-MD, "Remote member spaces"):
 
 - `reference label=<label> url=<raw base at a commit> [sha256=<hash>]` pins a Hive root's public copy on this device, and never
-  commits the pin. The address is `https://<host>/<path>/<40-hex commit>/` (`http` only to `127.0.0.1` or `localhost`), with no
+  commits the pin. The address is `https://<host>/[<path>/]<40-hex commit>/` (`http` only to `127.0.0.1` or `localhost`), with no
   user name, query, fragment or host that ends in `.`; on `raw.githubusercontent.com` it is exactly
   `https://raw.githubusercontent.com/<owner>/<repo>/<40-hex commit>/`, with no port. With `sha256=`, the `published_sha256` of
   the estate's `hives[]` entry, `PUBLISHED.md` must match it or nothing is read. A pin whose address these rules no longer
