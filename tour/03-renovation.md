@@ -2,6 +2,8 @@
 
 `model/before/` is the house as it stood on the current version: a rapp-hive/1 declaration (one owner, two members) as the first frame of its Mother Hive stream, signed by Avery exactly as rapp-hive/1 requires, two tasks, and Emery's signed request from the old onboarding script. `model/hive/` is the same house after the move.
 
+The move rewrote nothing, so all 4 old frames are still in `model/hive/`, byte for byte. Each frame is stored once in this repository: `model/before/` keeps the old identity records and `FRAMES.json`, which names every old frame by its path, frame hash and SHA-256.
+
 1. The migration plan was built from the rapp-hive/1 declaration. It keeps the world, names the one owner as steward founder, and pins a steward policy whose only decider is Avery, so it decides exactly like rapp-hive/1.
 2. Plan particle `0e80ba5df8c79578…`. Each identity then signed only its own steps:
 
@@ -12,13 +14,21 @@
 | Casey (designer, tablet) | phase 1 | hive2.join |
 | Avery (team lead, laptop) | phase 2 | hive2.grant, hive2.grant |
 
-3. Nothing was rewritten: every frame in `before/` is in `hive/` byte for byte, and still verifies under rapp-hive/1.
+3. Nothing was rewritten: every frame of the old house is in `hive/` byte for byte, and still verifies under rapp-hive/1.
 4. Later the steward adopted policy v2 (every member decides; two grants and a confirmed key to join). Requests already waiting kept their rules.
 
-Run it yourself: `cd vendor && python3 -B -m rapp_hive2 migrate plan-hive1 ../model/before --declaration <hash> --name "Contoso Model Hive" --out /tmp/plan.json`. The protocol repository's MIGRATION.md explains Path A (rapp-hive/1), Path B (seeded join requests) and Path C (new Hives).
+Run it yourself from the repository root. The first command rebuilds the old house in a new folder beside your checkout, checking every frame against `FRAMES.json`; the second builds the migration plan from it and prints the same plan particle:
+
+```sh
+python3 -B tools/before.py ../contoso-before
+cd vendor
+python3 -B -m rapp_hive2 migrate plan-hive1 ../../contoso-before --declaration 8e864ead138f8e6d31166304c04b1adf698716ae4805b6b05749ca4a32a51380 --legacy-request 3d909236cef8d7636b570a6f681a0a2670ef42ce322e88a31755abdb92dabe0c --name "Contoso Model Hive" --out ../../contoso-plan.json
+```
+
+The protocol repository's MIGRATION.md explains Path A (rapp-hive/1), Path B (seeded join requests) and Path C (new Hives).
 
 ## Reads
-- `../model/before/` and the migration frames in `../model/hive/`.
+- `../model/before/` (the old identity records and `FRAMES.json`), the old frames it names in `../model/hive/`, and the migration frames there.
 
 ## Does
 Shows the move to rapp-hive/2.

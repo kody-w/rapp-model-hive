@@ -8,6 +8,7 @@ import importlib.util
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -23,9 +24,10 @@ AGENT_FILE = ROOT / "agents" / "model_hive_agent.py"
 UTF8 = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
 sys.path.insert(0, str(VENDOR))
 
-from rapp_hive2 import hive, vectors  # noqa: E402
+from rapp_hive2 import hive, model, rapp1, vectors  # noqa: E402
 
 AGENT_COUNT = 0
+RAPPID = re.compile(r"@[a-z0-9]+(?:-[a-z0-9]+)*/[a-z0-9]+(?:-[a-z0-9]+)*:[0-9a-f]{64}(?![0-9a-f])")  # a keyed rappid (RAPP/1 §6.1), with or without "rappid:"
 
 
 def load_agent() -> types.ModuleType:
@@ -71,6 +73,7 @@ class ModelTests(unittest.TestCase):
         done = run(sys.executable, "-B", "tools/build.py", "--check")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
         self.assertTrue(json.loads(done.stdout)["ok"])
+        self.assertTrue(json.loads(done.stdout)["before_rebuilt_byte_for_byte"])
 
     def test_the_vendored_reference_is_the_pinned_commit(self) -> None:
         provenance = json.loads((VENDOR / "PROVENANCE.json").read_text(encoding="utf-8"))
@@ -111,6 +114,110 @@ class ModelTests(unittest.TestCase):
         summary = json.loads(done.stdout)["summary"]
         self.assertTrue(summary[0].startswith("Contoso Model Hive"))
         self.assertTrue(any(line.startswith("Waiting: frankie-laptop has 1 of 2") for line in summary))
+
+
+class BeforeTests(unittest.TestCase):
+    """The house before migration: each frame is stored once (RAPP/1 §7.6), yet the old house is rebuilt byte for byte."""
+
+    def test_each_frame_is_stored_once(self) -> None:
+        positions: dict[tuple[str, int], str] = {}
+        for path in sorted(ROOT.rglob("*.json")):
+            relative = path.relative_to(ROOT)
+            if {".git", "node_modules"}.intersection(relative.parts):
+                continue
+            try:
+                value = json.loads(path.read_bytes())
+            except ValueError:
+                continue
+            if isinstance(value, dict) and set(value) == rapp1.FRAME_KEYS and value.get("spec") == "rapp/1":
+                position = (value["stream_id"], value["seq"])
+                if position in positions:
+                    self.fail(f"{relative.as_posix()} repeats the frame at {positions[position]} (a RAPP/1 §7.6 duplicate position)")
+                positions[position] = relative.as_posix()
+        self.assertEqual(sorted(positions.values()), sorted(path.relative_to(ROOT).as_posix() for path in (ROOT / "model" / "hive" / "streams").rglob("*.json")))
+
+    def test_the_tour_commands_rebuild_the_house_and_the_plan(self) -> None:
+        tour = (ROOT / "tour" / "03-renovation.md").read_text(encoding="utf-8")
+        commands = tour.split("```sh\n", 1)[1].split("```", 1)[0].splitlines()
+        self.assertEqual(commands[1], "cd vendor")
+        with tempfile.TemporaryDirectory() as scratch:
+            root = copy_checkout(Path(scratch) / "checkout")
+            shutil.copytree(ROOT / "tools", root / "tools", ignore=shutil.ignore_patterns("__pycache__"))
+            first, last = ([sys.executable, *shlex.split(line)[1:]] for line in (commands[0], commands[2]))
+            done = run(*first, cwd=root)
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            answer = json.loads(done.stdout)
+            self.assertEqual(answer["frames_verified"], 4)
+            folder = Path(scratch) / "contoso-before"
+            self.assertEqual({path: (folder / path).read_bytes() for path in hive._files(folder)}, model.build()["before"])
+            done = run(*last, cwd=root / "vendor")
+            self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+            story = json.loads((ROOT / "model" / "STORY.json").read_text(encoding="utf-8"))
+            self.assertEqual(json.loads(done.stdout)["plan_particle"], story["plan_particle"])
+            self.assertTrue((Path(scratch) / "contoso-plan.json").is_file())
+            self.assertIn(answer["declaration"], commands[2])
+            for request in answer["legacy_requests"]:
+                self.assertIn(request, commands[2])
+
+    def test_the_agent_rebuilds_the_same_house(self) -> None:
+        agent = load_agent()
+        self.assertEqual(agent._before_house(agent.load_engine(ROOT), ROOT), model.build()["before"])
+
+    def test_a_changed_or_misplaced_frame_is_refused(self) -> None:
+        def index(root: Path) -> tuple[Path, dict]:
+            path = root / "model" / "before" / "FRAMES.json"
+            return path, json.loads(path.read_bytes())
+
+        def changed_frame(root: Path) -> None:
+            frame = root / "model" / "hive" / index(root)[1]["frames"][1]["path"]
+            frame.write_bytes(frame.read_bytes().replace(b"Photograph the site walk-through", b"Photograph the site walk-thru"))
+
+        def renamed(value: str) -> object:
+            def change(root: Path) -> None:
+                path, listed = index(root)
+                listed["frames"][0]["path"] = value
+                path.write_text(json.dumps(listed), encoding="utf-8")
+            return change
+
+        def listed_twice(root: Path) -> None:
+            path, listed = index(root)
+            listed["frames"][1] = dict(listed["frames"][0])
+            path.write_text(json.dumps(listed), encoding="utf-8")
+
+        def second_copy(root: Path) -> None:
+            relative = index(root)[1]["frames"][0]["path"]
+            (root / "model" / "before" / relative).parent.mkdir(parents=True)
+            shutil.copyfile(root / "model" / "hive" / relative, root / "model" / "before" / relative)
+
+        cases = [
+            ("a frame changed in model/hive", changed_frame, "REFUSE_TAMPER"),
+            ("a listed path outside streams/", renamed("HIVE.json"), "REFUSE_SCHEMA"),
+            ("a listed path that climbs out", renamed("streams/../HIVE.json"), "REFUSE_PORTABLE_PATH"),
+            ("a listed path naming another frame", renamed(index(ROOT)[1]["frames"][1]["path"]), "REFUSE_TAMPER"),
+            ("one frame listed twice", listed_twice, "REFUSE_SCHEMA"),
+            ("a second copy of a frame in model/before", second_copy, "REFUSE_SCHEMA"),
+        ]
+        for name, change, code in cases:
+            with self.subTest(name), tempfile.TemporaryDirectory() as scratch:
+                root = copy_checkout(Path(scratch) / "checkout")
+                shutil.copytree(ROOT / "tools", root / "tools", ignore=shutil.ignore_patterns("__pycache__"))
+                change(root)
+                target = Path(scratch) / "contoso-before"
+                done = run(sys.executable, "-B", "tools/before.py", str(target), cwd=root)
+                self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+                self.assertEqual(json.loads(done.stdout)["refusal"]["code"], code, done.stdout)
+                self.assertFalse(target.exists(), "a refused house is never written")
+                previous = os.environ.get("RAPP_MODEL_HIVE")
+                os.environ["RAPP_MODEL_HIVE"] = str(root)
+                try:
+                    answer = ask(load_agent().ModelHiveAgent(), action="migrate_demo")
+                finally:
+                    if previous is None:
+                        del os.environ["RAPP_MODEL_HIVE"]
+                    else:
+                        os.environ["RAPP_MODEL_HIVE"] = previous
+                self.assertFalse(answer["ok"])
+                self.assertEqual(answer["error"]["code"], code, answer)
 
 
 class AgentTests(unittest.TestCase):
@@ -156,6 +263,7 @@ class AgentTests(unittest.TestCase):
         demo = ask(agent, action="migrate_demo")
         self.assertTrue(demo["matches_committed_model"], demo["differing"])
         self.assertEqual(demo["plan_particle"], story["plan_particle"])
+        self.assertEqual(demo["old_frames_checked"], 4)
         self.assertEqual([step["signer"] for step in demo["steps"]], ["avery-laptop", "blake-phone", "casey-tablet", "avery-laptop"])
         verified = ask(agent, action="verify")
         self.assertEqual(verified["state_particle"], story["state_particle"])
@@ -241,6 +349,84 @@ class AgentTests(unittest.TestCase):
         self.assertIn("RAPP_MODEL_HIVE", answer["error"]["next"])
 
 
+class AnchorRequestTests(unittest.TestCase):
+    """ANCHOR-REQUEST.md asks the estate owner for exactly the model's published keys. It is never a RAPP/1 trust anchor, a rapp/1-registry or a registry entry with authority, and it cites the real estate by public pointer only."""
+
+    def test_the_request_names_exactly_the_published_keys(self) -> None:
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        text = (ROOT / "ANCHOR-REQUEST.md").read_text(encoding="utf-8")
+        self.assertNotEqual(request["schema"], "rapp/1-registry")
+        self.assertNotIn("sig", request)
+        records = sorted((json.loads(path.read_bytes()) for path in (ROOT / "model" / "hive" / "identities").glob("*.json")), key=lambda record: record["rappid"])
+        entries = [{"type": "spki", "rappid": record["rappid"], "spki_der_b64": record["spki_der_b64"], "deprecated": False} for record in records]
+        self.assertEqual(request["requested"]["entries"], entries)
+        keys = {entry["rappid"]: entry["spki_der_b64"] for entry in entries}
+        frames = [rapp1.parse(path.read_bytes()) for path in sorted((ROOT / "model" / "hive" / "streams").rglob("*.json"))]
+        signed: dict[str, int] = {}
+        for frame in frames:
+            kid = rapp1.jws_kid(frame)
+            rapp1.verify_signature(frame, keys[kid], kid)
+            signed[kid] = signed.get(kid, 0) + 1
+        self.assertEqual(signed, request["self_consistency"]["frames_verified_per_kid"])
+        self.assertEqual(sum(signed.values()), request["subject"]["frames"])
+        for entry in entries:
+            self.assertIn(entry["rappid"], text)
+            self.assertIn(entry["spki_der_b64"], text)
+        optional = request["not_needed_for_rapp_check"]
+        kinds = sorted({(frame["kind"], rapp1.stream_family(frame["stream_id"])) for frame in frames if frame["kind"] != "memory.save"})
+        self.assertEqual(optional["kind"]["entries"], [{"type": "kind", "kind": kind, "family": family, "deprecated": False} for kind, family in kinds])
+        genesis = sorted(({"type": "genesis", "stream_id": frame["stream_id"], "frame_hash": frame["frame_hash"], "deprecated": False} for frame in frames if frame["seq"] == 0), key=lambda entry: entry["stream_id"])
+        self.assertEqual(optional["genesis"]["entries"], genesis)
+
+    def test_the_estate_is_cited_by_public_pointer_only(self) -> None:
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        text = (ROOT / "ANCHOR-REQUEST.md").read_text(encoding="utf-8")
+        anchor = request["trust_anchor"]
+        published = anchor["published_in"]
+        self.assertEqual((published["repository"], published["path"], published["section"]), ("https://github.com/kody-w/rapp-1", "README.md", "Trust anchor (out-of-band publication, §13.1)"))
+        self.assertEqual(RAPPID.findall(json.dumps(anchor, ensure_ascii=False)), [], "the trust anchor is a pointer, never a value")
+        self.assertEqual(anchor["same_value_at"]["json_pointer"], request["registry_of_record"]["estate_owner_json_pointer"])
+        self.assertIn(published["section"], text)
+        self.assertIn(published["url"], text)
+        tooling = request["ceremony"]["tooling"]
+        for pointer in (published, anchor["same_value_at"], tooling, *request["flags_for_estate_lead"]["flags"]):
+            self.assertRegex(pointer["commit"], r"^[0-9a-f]{40}$")
+            self.assertIn(pointer["commit"][:7], text, pointer["repository"])
+        for tool in (tooling["sign_and_verify"], tooling["gate"]):
+            self.assertIn(tool["path"], text)
+        model_rappids = {rappid for path in (ROOT / "model").rglob("*.json") for rappid in RAPPID.findall(path.read_text(encoding="utf-8"))}
+        for name, body in (("anchor-request.json", json.dumps(request, ensure_ascii=False)), ("ANCHOR-REQUEST.md", text)):
+            named = set(RAPPID.findall(body))
+            self.assertTrue(named, name)
+            self.assertEqual(named - model_rappids, set(), f"{name} names a rappid that is not one of the model's own")
+
+    def test_nothing_here_is_a_rapp1_trust_anchor_or_registry(self) -> None:
+        """AGENTS.md: no RAPP/1 trust anchor, rapp/1-registry or §13 entry with authority. The Hive's own rapp-hive/2 anchor is part of the model and is not one."""
+
+        def nodes(value: object):
+            yield value
+            for child in value.values() if isinstance(value, dict) else value if isinstance(value, list) else ():
+                yield from nodes(child)
+
+        authority = {"estate_owner", "tombstone", "re-anchor", "grail-kernel"}
+        for path in sorted(ROOT.rglob("*.json")):
+            relative = path.relative_to(ROOT)
+            if {".git", "node_modules"}.intersection(relative.parts):
+                continue
+            try:
+                value = json.loads(path.read_bytes())
+            except ValueError:
+                continue
+            if isinstance(value, dict):
+                self.assertNotEqual(value.get("schema"), "rapp/1-registry", relative.as_posix())
+            for node in nodes(value):
+                if isinstance(node, dict):
+                    self.assertNotIn(node.get("type"), authority, relative.as_posix())
+        request = json.loads((ROOT / "anchor-request.json").read_text(encoding="utf-8"))
+        self.assertEqual([node for node in nodes(request) if isinstance(node, dict) and "sig" in node], [], "the request is never signed")
+        self.assertTrue(json.loads((ROOT / "model" / "hive" / "HIVE.json").read_bytes())["schema"].startswith("rapp-hive/2"))
+
+
 class PublicSafetyTests(unittest.TestCase):
     """A generic scan for things that must never be published. Patterns are assembled so this file cannot match itself."""
 
@@ -270,6 +456,11 @@ class PublicSafetyTests(unittest.TestCase):
             for label, pattern in self.PATTERNS.items():
                 for match in pattern.finditer(text):
                     findings.append(f"{relative}: {label}: {match.group(0)[:40]!r}")
+        self.assertEqual(findings, [])
+
+    def test_every_rappid_is_fictional(self) -> None:
+        """A keyed rappid is a key fingerprint (RAPP/1 §13.1), so a real one is real data. Every rappid here is a fictional @contoso one."""
+        findings = sorted({f"{path.relative_to(ROOT).as_posix()}: {match.group(0).split('/')[0]}" for path in self.files() for match in RAPPID.finditer(path.read_bytes().decode("utf-8", errors="replace")) if not match.group(0).startswith("@contoso/")})
         self.assertEqual(findings, [])
 
     def test_the_model_is_labelled_synthetic_everywhere_people_look(self) -> None:

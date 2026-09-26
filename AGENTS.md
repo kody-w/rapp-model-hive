@@ -13,6 +13,10 @@ frontier draft `rapp-hive/2` (canary ring). Fictional people and devices, public
 - `vendor/` is an exact copy of the reference at the commit in `vendor/PROVENANCE.json`.
   Change it only with `tools/vendor.py`, never by hand.
 - The model is display material, not authority. `model/STORY.json` is derived labels only.
+- Never create, sign or simulate a RAPP/1 trust anchor (§13.1), a `rapp/1-registry`, or a §13
+  registry entry with authority. The Hive's own `rapp-hive/2` anchor, built from the public
+  test keys, is part of the model and is not one. `ANCHOR-REQUEST.md` asks the estate owner
+  and cites the estate's anchor and registry by public pointer only; only the owner decides.
 
 ## Guiding someone through it
 
@@ -25,6 +29,10 @@ cd vendor
 python3 -B -m rapp_hive2 status ../model/hive
 python3 -B -m rapp_hive2 cross ../model/hive <12 hex of a message> <member slug>
 ```
+
+`model/before/` is the house before the move. Each frame is stored once, in `model/hive/`:
+`python3 -B tools/before.py <new folder>` rebuilds the old house and checks every frame
+(`tour/03-renovation.md` shows the whole replay).
 
 A RAPP Brainstem can hotload `agents/model_hive_agent.py` (actions: `tour`, `status`,
 `verify`, `cross`, `migrate_demo`, `conformance`). It runs only the engine bytes it pins.

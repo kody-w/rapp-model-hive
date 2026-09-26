@@ -1,0 +1,383 @@
+{
+ "schema": "rapp-model-hive-anchor-request/1",
+ "status": "requested; owner decision pending. This is a request, not a RAPP/1 trust anchor (§13.1), a rapp/1-registry, a §13 registry entry with authority, or a signature.",
+ "note": "Machine-readable copy of ANCHOR-REQUEST.md. Only the estate owner can create the entries below, by signing the next revision of the registry of record. Everything in this repository is SYNTHETIC: fictional people and devices, signed with public test keys that anyone can re-derive. Real estate facts are cited by public pointer only; no real rappid is copied here (under RAPP/1 §13.1 a keyed rappid is a key fingerprint).",
+ "subject": {
+  "repository": "https://github.com/kody-w/rapp-model-hive",
+  "finding": "rapp_check at rapp-1@591e014 reports every signed frame under model/hive/streams/ as '§10 signature verification unavailable' (status unverified): the frames pass §7 steps 1-5, but no §13 registry lists their signers' keys.",
+  "frames": 38,
+  "signers": 6
+ },
+ "checker": {
+  "repository": "https://github.com/kody-w/rapp-1",
+  "commit": "591e014ad39e223b00ab343ae26e5d9a867ebeee",
+  "path": "rapp_check.py"
+ },
+ "trust_anchor": {
+  "what": "The estate owner's rappid (RAPP/1 §13.1), cited by public pointer. Its value is not copied into this repository.",
+  "published_in": {
+   "repository": "https://github.com/kody-w/rapp-1",
+   "commit": "591e014ad39e223b00ab343ae26e5d9a867ebeee",
+   "path": "README.md",
+   "section": "Trust anchor (out-of-band publication, §13.1)",
+   "url": "https://github.com/kody-w/rapp-1/blob/591e014ad39e223b00ab343ae26e5d9a867ebeee/README.md#trust-anchor-out-of-band-publication-131"
+  },
+  "same_value_at": {
+   "repository": "https://github.com/kody-w/rapp-map",
+   "commit": "4c8ba6bbe73125cc980d0c3b38c59c99e4b231c0",
+   "path": "ecosystem-spec.json",
+   "json_pointer": "/entries/0/rappid",
+   "entry_type": "estate_owner"
+  }
+ },
+ "registry_of_record": {
+  "repository": "https://github.com/kody-w/rapp-map",
+  "path": "ecosystem-spec.json",
+  "canonical_source": "https://raw.githubusercontent.com/kody-w/rapp-map/main/ecosystem-spec.json",
+  "checked_at_commit": "81dd6f05ab0969d11253f3fe7f4834288824d17e",
+  "last_changed_in_commit": "4c8ba6bbe73125cc980d0c3b38c59c99e4b231c0",
+  "git_blob": "55937806247133f89851d125bddb35b57a4d270d",
+  "schema": "rapp/1-registry",
+  "entries_member": "entries",
+  "registry_seq": 2,
+  "estate_owner_json_pointer": "/entries/0/rappid",
+  "estate_owner_is_the_trust_anchor": true,
+  "load_document": "verified",
+  "checked_utc": "2026-09-25"
+ },
+ "requested": {
+  "action": "Append these entries, unchanged, to the registry of record in its next owner-signed revision (registry_seq 3 while the registry is at 2). Nothing else is requested.",
+  "entry_type": "spki (RAPP/1 §13.3; rapp_registry.ENTRY_MEMBERS['spki'] = type, rappid, spki_der_b64, deprecated)",
+  "source": "model/hive/identities/*.json (the model's published identity records)",
+  "entries": [
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b",
+    "spki_der_b64": "MCowBQYDK2VwAyEAhaA219hYB+q+4v+PpPkHj2Xo1HU7WPI8BU1f9ejPziA=",
+    "deprecated": false
+   },
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0",
+    "spki_der_b64": "MCowBQYDK2VwAyEAJTmOAiGcQTtMslUJrH8OfAUCWCPYucr3RT2gyIV3Jx8=",
+    "deprecated": false
+   },
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a",
+    "spki_der_b64": "MCowBQYDK2VwAyEAVWPjEZIpntmvfjKba3Ym+lMbT/wTldOeBc3begBtqqY=",
+    "deprecated": false
+   },
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8",
+    "spki_der_b64": "MCowBQYDK2VwAyEAQDCvx5T01lYvfx6/0FPvAleWpyaBIKviwskRM3dM4DQ=",
+    "deprecated": false
+   },
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/emery-kiosk:e3cb6fe1c6629325b3e61a1ae81736198dcb492d4fb6c6f0e1d424fc9e9a64ed",
+    "spki_der_b64": "MCowBQYDK2VwAyEAGjUoWTBWlZ1/X0bTUeExfxibiotR7xLWP30CVxTzjLk=",
+    "deprecated": false
+   },
+   {
+    "type": "spki",
+    "rappid": "rappid:@contoso/frankie-laptop:2a7d96c275540100a5312fa8f10490a5ad2b8cdaafe372704d87ced7d2c322bd",
+    "spki_der_b64": "MCowBQYDK2VwAyEAfh3osFpLUAymoABCfvV088Ywfz9rk6bfrbZ+JAq+MZs=",
+    "deprecated": false
+   }
+  ]
+ },
+ "self_consistency": {
+  "what": "Not trust. Each entry passes rapp_registry.validate_entry (its SPKI hashes to its rappid tail), and every frame's detached JWS verifies against its kid's entry with rapp.verify_detached_jws, both at rapp-1@591e014.",
+  "frames_verified_per_kid": {
+   "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b": 15,
+   "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0": 8,
+   "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a": 7,
+   "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8": 4,
+   "rappid:@contoso/emery-kiosk:e3cb6fe1c6629325b3e61a1ae81736198dcb492d4fb6c6f0e1d424fc9e9a64ed": 2,
+   "rappid:@contoso/frankie-laptop:2a7d96c275540100a5312fa8f10490a5ad2b8cdaafe372704d87ced7d2c322bd": 2
+  },
+  "frames_verified": 38,
+  "frames_failed": 0,
+  "negative_controls": {
+   "verified_with_another_signers_key": 0,
+   "verified_after_changing_the_frame": 0
+  },
+  "rederived_by": "tests/test_model_hive.py (AnchorRequestTests), on every CI run, with the vendored reference"
+ },
+ "expected_after_ceremony": {
+  "call": "rapp_check.check_repo(<checkout>, signature_verifier=reg.signature_verifier()), with reg from rapp_registry.load_document(doc, entries_member='entries', trust_anchor=<estate_owner>)",
+  "verdict": "COMPLIANT",
+  "findings": 0,
+  "frames_verified": 38,
+  "checked_in_advance_with": "an unsigned draft of that revision, which load_document reports only as 'draft' (never authority) and refuses without allow_unsigned; the draft was not kept",
+  "before_ceremony": "persisted_seq=3 refuses today's registry_seq 2 as a rollback; with persisted_seq=2 the same check_repo call reports DRIFT with 17 x '§7 frame verification step 6' ('no spki entry for kid (registry absence is refusal)'), one for the first frame of each stream.",
+  "cli": "The rapp_check command line supplies no signature verifier, so its verdict stays DRIFT (38 x '§10 signature verification unavailable', status unverified) even after the ceremony."
+ },
+ "not_needed_for_rapp_check": {
+  "note": "rapp_check never calls rapp_registry.check_frame_binding and never reads genesis entries. Listed for completeness only; this request does not ask for them.",
+  "kind": {
+   "why": "RAPP/1 §7.2: a frame's kind family must be the §13 registry binding and match its stream_id form (rapp_registry.Registry.check_frame_binding). memory.save is already registered (family memory). hive2.* belong to the experimental frontier draft rapp-hive/2, and kinds are an estate-wide, append-only namespace, so registering them is an estate decision beyond this model.",
+   "effect": "A consumer that also runs check_frame_binding accepts 10 of the 38 frames (memory.save) with the six spki entries alone, and 38 of 38 with these kind entries added (checked with rapp_registry at rapp-1@591e014).",
+   "entries": [
+    {
+     "type": "kind",
+     "kind": "hive.declaration",
+     "family": "body",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.accept",
+     "family": "memory",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.adopt",
+     "family": "memory",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.attest",
+     "family": "memory",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.grant",
+     "family": "memory",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.join",
+     "family": "memory",
+     "deprecated": false
+    },
+    {
+     "type": "kind",
+     "kind": "hive2.manifest",
+     "family": "memory",
+     "deprecated": false
+    }
+   ]
+  },
+  "genesis": {
+   "why": "RAPP/1 §13.3: every stream registers its creation genesis; §7.6 heads descend from it. One entry per stream in model/hive/streams/.",
+   "effect": "With these entries, each stream's seq-0 frame is its registered genesis (17 of 17).",
+   "entries": [
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b:hive",
+     "frame_hash": "9527dc8cd729770c2b9436d0f08f0a297e7714890f199d12fc14b8b0bdf82292",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b:manifest",
+     "frame_hash": "768c06d2d77616c4bf1e2bd171ecce4ea9368b1afed8195de60fc9a310ea1871",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/avery-laptop:121f71337e335720c65dc4f7b459c92aea6197460224401810721765fabea47b:tasks",
+     "frame_hash": "74b2777228ea3c814d5ac04c378dd5113f0322a94708adcf283d73bb015866f5",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0:hive",
+     "frame_hash": "a44946b8a1162d5918d7cfc4f63a9ee10c42d08d0ffb603a4b4a54bc37fe69fd",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0:manifest",
+     "frame_hash": "5dc288f28b17937a0de22dad82c3667243746253e3e79d237d05186c0ce94a7c",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/blake-phone:dde384494581cfa734485cabf33c0177b40cdc7e88cb4877bc2b67e65fdf4ba0:tasks",
+     "frame_hash": "29a20deff3bb2c062b474fbea855179b48fe911c0926497abf740d7cd05c585f",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a:hive",
+     "frame_hash": "0f4a48d46dd0823537494446ff81a94b8fd36ef6c67b4dce62ff4204c185e231",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a:manifest",
+     "frame_hash": "6dc6e9bada4edf6a75c69a58ac3e867067d5d3ce8799b9e652eef3b62605c870",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/casey-tablet:4c27b4d1826f9f50175f2aa907116746fab5a120641bdf3d357f148e60a2c92a:tasks",
+     "frame_hash": "45ef3d674de8fd20a30c5de1fb9fd09a848fd0dadf1e7f4fc16d70164d62f068",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/contoso-hive:f2a17f3ba58030f62f46d5af946feed5893a6608b0a80245782c436c77e1e5bc",
+     "frame_hash": "8e864ead138f8e6d31166304c04b1adf698716ae4805b6b05749ca4a32a51380",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8:hive",
+     "frame_hash": "5db03a61cd14c7b2287814f7b4322d6f72bb4219a45b1d04e234c0d5408c131e",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8:manifest",
+     "frame_hash": "8d0f410445834f4eee132a5e6d64f9babb97f84d6b6adc58d4c6c230b15b6995",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/drew-desktop:9b864ebcdf7b4a3c011fab6b643e595c8f9182f7c98c034b6778c0adcf6273a8:tasks",
+     "frame_hash": "af35abe2bda6d9d732ef2066aef914ab1d7dcbab976fe2e079244324deea5314",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/emery-kiosk:e3cb6fe1c6629325b3e61a1ae81736198dcb492d4fb6c6f0e1d424fc9e9a64ed:onboarding",
+     "frame_hash": "3d909236cef8d7636b570a6f681a0a2670ef42ce322e88a31755abdb92dabe0c",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/emery-kiosk:e3cb6fe1c6629325b3e61a1ae81736198dcb492d4fb6c6f0e1d424fc9e9a64ed:tasks",
+     "frame_hash": "c22cfe76d2ec0ecd06c15821666858ee92cc183e6bc5b10a1f3035594c3d5520",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/frankie-laptop:2a7d96c275540100a5312fa8f10490a5ad2b8cdaafe372704d87ced7d2c322bd:hive",
+     "frame_hash": "e35a51e9b4e124a5138ad98c0fcfc49077c597f9e73d2098c6e839caf5222a73",
+     "deprecated": false
+    },
+    {
+     "type": "genesis",
+     "stream_id": "rappid:@contoso/frankie-laptop:2a7d96c275540100a5312fa8f10490a5ad2b8cdaafe372704d87ced7d2c322bd:tasks",
+     "frame_hash": "63619f89e52fda4a366e6f011497d6f48882bbbe2e19722b97474caaac16456b",
+     "deprecated": false
+    }
+   ]
+  }
+ },
+ "ceremony": {
+  "tooling": {
+   "repository": "https://github.com/kody-w/rapp-map",
+   "commit": "81dd6f05ab0969d11253f3fe7f4834288824d17e",
+   "sign_and_verify": {
+    "path": "tools/registry_sign.py",
+    "last_changed_in_commit": "95e2f7290886e2de591fc78e4fb6e14b83435381",
+    "needs": "the cryptography package, and RAPP1_DIR naming a kody-w/rapp-1 checkout (591e014), whose rapp and rapp_registry it imports",
+    "verify": "python3 tools/registry_sign.py verify --in ecosystem-spec.json --persisted-seq <last verified seq> --trust-anchor <estate_owner> (rapp_registry.load_document; refuses to run without an out-of-band trust anchor)",
+    "sign": "python3 tools/registry_sign.py sign --key <estate owner key file> --in <next revision> --out ecosystem-spec.json"
+   },
+   "gate": {
+    "path": ".github/scripts/registry-verify.mjs",
+    "function": "verifyRegistry",
+    "last_changed_in_commit": "cac49daa5aca3ed6c4272d449e88b224606235f1",
+    "run_by": "bash .github/scripts/run-offline-gates.sh (workflows Drift lint and Standing guard), through .github/scripts/standing-guard.mjs local"
+   }
+  },
+  "steps": [
+   "Fetch the registry of record from canonical_source and check it against the trust anchor: python3 tools/registry_sign.py verify --in ecosystem-spec.json --persisted-seq 2 --trust-anchor <estate_owner> must print 'verified: ok'.",
+   "Make the next revision: the same document without sig, registry_seq + 1, and requested.entries appended to 'entries' (append-only: every existing entry stays, unchanged and in order). Envelope members such as published_utc are the owner's to set.",
+   "The estate owner signs it: python3 tools/registry_sign.py sign --key <estate owner key file> --in <next revision> --out ecosystem-spec.json. The tool refuses a key path inside the repository and a key file that group or others can access ('key file must be mode 0600'), and refuses a key whose SPKI does not hash to the estate_owner rappid's tail. It signs canonical(document without sig) with a §10 detached JWS (EdDSA, kid = estate_owner), sets it as sig, and writes nothing unless the signed document verifies. Only the estate owner's key can do this.",
+   "Check it before publishing, against the out-of-band anchor and the last verified sequence: python3 tools/registry_sign.py verify --in ecosystem-spec.json --persisted-seq 2 --trust-anchor <estate_owner> must print 'verified: ok'.",
+   "Publish it at canonical_source through kody-w/rapp-map's own process. For registry_seq 2 that was one commit, 4c8ba6b, which changed ecosystem-spec.json and the public halves recorded in RAPP1_OWNER_ACTIONS.json together. rapp-map's gates require that: .github/scripts/standing-guard.mjs refuses a ledger whose owner_inputs disagree with the registry's bytes (registry_document_sha256), sig or registry_seq, and re-verifies the signature with verifyRegistry, which takes the owner from the document's own estate_owner entry; the check against the out-of-band anchor is the previous step."
+  ]
+ },
+ "risk": "These are PUBLIC TEST KEYS. Anyone can re-derive each private key from its published label (vendor/rapp_hive2/sign.py test_key: Ed25519 seed = SHA-256 of 'rapp-hive/2:public-test-key/1\\n' + 'contoso-model-hive/<slug>'). Registering them lets anyone sign new frames that the estate registry's verifier accepts for these six @contoso kids, at any utc a frame declares. A tombstone does not close this: frames declare their own utc, and at rapp-1@591e014 load_document refuses any registry holding a tombstone unless the consumer supplies trusted issuance context (tombstone_issued_at), which would affect every consumer of the estate registry. A deprecated spki entry verifies nothing.",
+ "if_declined": "The model's signed frames stay unverified under RAPP/1 §10 by design, and the residual finding (38 x '§10 signature verification unavailable', status unverified, zero violations) should be recorded as accepted. Inside the Hive they still verify under rapp-hive/2 against the Hive's own identity records and anchor (python3 -B -m rapp_hive2 verify ../model/hive --anchor 03972c7e8049b59134681ef9b1d7af369e4b06273d262691c5b28d6c48dcdce8, from vendor/).",
+ "when_decided": "Either way, a follow-up commit to this repository records the decision. It updates /status here and the status line of ANCHOR-REQUEST.md (for example 'declined on <date>; the residual finding is accepted' or 'registered at registry_seq <n> on <date>'). If the entries are registered, the same commit also updates /subject/finding here and the sentence in ANCHOR-REQUEST.md that no registry lists the signers.",
+ "related_gap": {
+  "id": "G8",
+  "title": "Hive members are names bound to keys, not RAPPIDs",
+  "url": "https://github.com/kody-w/rapp-hive-public/blob/8904771404d8b9e19fb2b841ac8eb0af9158d211/gaps/G08.md",
+  "fix": "Constitution Part V.4 (proposed)",
+  "relation": "Inside a Hive a member is a name bound to keys by the Hive's signed history, not a RAPPID in a registry. These six kids are exactly that; the spki entries would be 'a RAPPID linked where one is needed', and declining leaves them as G8 describes."
+ },
+ "flags_for_estate_lead": {
+  "note": "Flagged, not resolved here. This request uses the trust anchor in the kody-w/rapp-1 README and the registry of record in kody-w/rapp-map.",
+  "flags": [
+   {
+    "id": "second-owner-rappid",
+    "flag": "kody-w/rapp-work names a different owner rappid from the trust anchor.",
+    "repository": "https://github.com/kody-w/rapp-work",
+    "commit": "29ead23b21645f8d7682ee00414930ffa9ce0ca6",
+    "last_changed_in_commit": "4b4fc213c352de9157858041e57ab72bb5e17551",
+    "pointers": [
+     {
+      "path": "owner-anchor.json",
+      "json_pointer": "/owner_rappid"
+     },
+     {
+      "path": "registry.json",
+      "json_pointer": "/entries/0/rappid"
+     }
+    ]
+   },
+   {
+    "id": "rapp-map-documents-disagree-on-ecosystem-spec",
+    "flag": "kody-w/rapp-1's README names kody-w/rapp-map ecosystem-spec.json the estate's registry of record, and rapp-map's own gates verify it as the owner-signed registry, but rapp-map's documents disagree about its status.",
+    "registry_of_record_named_in": {
+     "repository": "https://github.com/kody-w/rapp-1",
+     "commit": "591e014ad39e223b00ab343ae26e5d9a867ebeee",
+     "path": "README.md",
+     "section": "Trust anchor (out-of-band publication, §13.1)"
+    },
+    "repository": "https://github.com/kody-w/rapp-map",
+    "commit": "81dd6f05ab0969d11253f3fe7f4834288824d17e",
+    "documents": [
+     {
+      "path": "README.md",
+      "last_changed_in_commit": "cac49daa5aca3ed6c4272d449e88b224606235f1",
+      "url": "https://github.com/kody-w/rapp-map/blob/81dd6f05ab0969d11253f3fe7f4834288824d17e/README.md?plain=1#L12-L21",
+      "says": "'The authenticated registry evidence required by section 13 is absent', and consumers 'must refuse it as an authenticated registry'; its own 'Local validation' section says the owner has published the signed section 13 registry."
+     },
+     {
+      "path": "ECOSYSTEM_SPEC.md",
+      "last_changed_in_commit": "66dd34479a4b6e4e4a9c43cf782bd5cf18d999e5",
+      "url": "https://github.com/kody-w/rapp-map/blob/81dd6f05ab0969d11253f3fe7f4834288824d17e/ECOSYSTEM_SPEC.md?plain=1#L9-L12",
+      "says": "ecosystem-spec.json 'is quarantined and must be refused as authenticated registry evidence' until the owner action in RAPP1_OWNER_ACTIONS.md 'is completed and verified'."
+     },
+     {
+      "path": "RAPP1_OWNER_ACTIONS.md",
+      "last_changed_in_commit": "66dd34479a4b6e4e4a9c43cf782bd5cf18d999e5",
+      "url": "https://github.com/kody-w/rapp-map/blob/81dd6f05ab0969d11253f3fe7f4834288824d17e/RAPP1_OWNER_ACTIONS.md?plain=1#L1-L23",
+      "says": "The ledger is 'open and non-authoritative', the owner's publication location 'unknown', and the owner inputs 'remain null' in RAPP1_OWNER_ACTIONS.json."
+     },
+     {
+      "path": "RAPP1_OWNER_ACTIONS.json",
+      "last_changed_in_commit": "4c8ba6bbe73125cc980d0c3b38c59c99e4b231c0",
+      "json_pointers": [
+       "/status",
+       "/blockers/0/state",
+       "/blockers/0/owner_inputs/registry_seq"
+      ],
+      "says": "status 'owner-published', blocker state 'closed', owner inputs recorded at registry_seq 2."
+     },
+     {
+      "path": "RAPP1_STATUS.md",
+      "last_changed_in_commit": "cac49daa5aca3ed6c4272d449e88b224606235f1",
+      "url": "https://github.com/kody-w/rapp-map/blob/81dd6f05ab0969d11253f3fe7f4834288824d17e/RAPP1_STATUS.md?plain=1#L39-L46",
+      "says": "The owner action is 'closed', but the registry is still described as registry_seq 1 (lines 5 and 24); ecosystem-spec.json has been at registry_seq 2 since 4c8ba6b."
+     }
+    ]
+   }
+  ]
+ }
+}
