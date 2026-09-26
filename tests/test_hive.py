@@ -1452,7 +1452,11 @@ class RemoteMembers(HiveTest):
                            (f"https://raw.githubusercontent.com:8443/contoso/hive-public/{pinned}/",
                             "exactly https://raw.githubusercontent.com/<owner>/<repo>/<commit>/"),  # any port
                            (f"https://raw.githubusercontent.com./contoso/hive-public/{pinned}/", "plain parts"),
-                           (f"https://contoso.example./contoso/hive-public/{pinned}/", "plain parts")):  # a final dot
+                           (f"https://contoso.example./contoso/hive-public/{pinned}/", "plain parts"),  # a final dot
+                           (f"https://Contoso.example/contoso/hive-public/{pinned}/", "plain parts"),  # capitals
+                           (f"https://con_toso.example/contoso/hive-public/{pinned}/", "plain parts"),  # a _
+                           (f"HTTPS://contoso.example/contoso/hive-public/{pinned}/", "only https://"),  # scheme case
+                           (f"https://contoso.example:/contoso/hive-public/{pinned}/", "plain parts")):  # empty port
             with self.subTest(url=url):
                 self.not_done(self.A.say(action="reference", label="contoso", url=url), words)
         for url in (f"https://contoso.example/contoso/hive-public/{pinned}/", f"http://localhost:8080/contoso/hive-public/{pinned}/",

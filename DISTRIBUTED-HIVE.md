@@ -29,7 +29,7 @@ Hashes give integrity only. Until a signed entry of the estate's RAPP/1 registry
 | Hive root | a Hive's clean public copy: `PUBLISHED.md`, whose `hive:` is its Hive id (32 lowercase hex), and the files it lists, and no `HIVE.md` |
 | pointer | `members/<station>.md` in a Hive root: the curator's pin of one station |
 | card | `.rapp/member.md` in a station: the station's own description of itself |
-| raw base | an absolute URL ending in `/`, with no empty path part (no `//`), to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/`; on `https` or `http`, its host is written in lowercase letters, digits, `.` and `-`, and each path part is a plain name, `[A-Za-z0-9_-][A-Za-z0-9._-]*` |
+| raw base | an absolute URL ending in `/`, with no empty path part (no `//`), to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/`; on `https` or `http`, the scheme and the host are written in lowercase, the host in letters, digits, `.` and `-` with at most a port of digits after it, and each path part is a plain name, `[A-Za-z0-9_-][A-Za-z0-9._-]*` |
 | ref | a full 40-hex commit (pinned), or `HEAD` or a branch name (moving) |
 | channel | `rapp1-lts`, read at pinned LTS commits, or `newest`, read at `HEAD` |
 | operator | a Hive root's owner: the first of the last two path parts of its raw base (`contoso`); a raw base with fewer than two path parts names none, and each of its stations is `<owner>.<repo>` |
