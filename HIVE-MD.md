@@ -172,5 +172,6 @@ PUBLISHED.md or a pointer lists.
 - A remote reference is only as honest as the PUBLISHED.md at its pinned commit: the raw server is trusted only as far as
   the listed hashes, and nothing signs that listing until a signed entry of the estate's registry covers the root. A
   public copy that moves is never read; pin a newer commit to see newer files.
-- A station named like an instruction file (`agents`, `claude`, `gemini`, `skill`, `copilot-instructions`) cannot have a
-  pointer: `members/agents.md` is refused like any `AGENTS.md`.
+- A repository named like an instruction file (`agents`, `claude`, `claude.local`, `gemini`, `skill`,
+  `copilot-instructions`, in any case) can never be a station, whoever owns it: `members/agents.md` is refused like any
+  `AGENTS.md`, and so is a pointer whose `repo` is `fabrikam/agents`.

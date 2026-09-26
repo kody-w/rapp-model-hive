@@ -26,7 +26,7 @@ Hashes give integrity only. Until a signed entry of the estate's RAPP/1 registry
 | Word | Meaning |
 |---|---|
 | station | a public repository on the network |
-| Hive root | a Hive's clean public copy: `PUBLISHED.md` and the files it lists, and no `HIVE.md` |
+| Hive root | a Hive's clean public copy: `PUBLISHED.md`, whose `hive:` is its Hive id (32 lowercase hex), and the files it lists, and no `HIVE.md` |
 | pointer | `members/<station>.md` in a Hive root: the curator's pin of one station |
 | card | `.rapp/member.md` in a station: the station's own description of itself |
 | raw base | an absolute URL ending in `/`, to which `<ref>/<path>` is appended: `https://raw.githubusercontent.com/contoso/protocol/` |
@@ -115,12 +115,13 @@ URL.
 ## 6. The frontmatter grammar
 
 A pointer and a card each start with a line `---`, and their frontmatter ends at the next line that is exactly `---`. Every line
-between is either `key: value` or an item `  - item` under a key whose value is empty (`key:`). A key matches
-`[a-z][a-z0-9_]*` and appears once. A value, and an item, has at least one character and neither starts nor ends with
-whitespace (any character Python's `str.strip()` removes). Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item list where one value belongs, and one value where
-an item list belongs. Lists are sorted by code point (as Python's `sorted` sorts them) and hold no item twice. A file has at
-most 64 KB and follows HIVE-MD's text rules; a card, a station file, is also normalized text (section 5.2), while a
-pointer, a root file, is read after HIVE-MD's normalization.
+between is either `key: value` or an item `  - item` under a key whose value is empty (`key:`). A key matches `[a-z][a-z0-9_]*`
+and appears once. A value, and an item, has at least one character and neither starts nor ends with whitespace (any character
+Python's `str.strip()` removes). Readers refuse any other line, a repeated key, an unknown key, a missing required key, an item
+list where one value belongs, and one value where an item list belongs. Lists are sorted by code point (as Python's `sorted`
+sorts them) and hold no item twice. A file has at most 64 KB (65,536 bytes) as served, and again after HIVE-MD's normalization,
+and follows HIVE-MD's text rules; a card, a station file, is also normalized text (section 5.2), while a pointer, a root file,
+is read after HIVE-MD's normalization.
 
 Writers put the keys in the order of the tables below; readers accept any order. This is a strict subset of what HIVE-MD's
 frontmatter reader takes, so the Hive agent reads these files the same way.
@@ -131,7 +132,7 @@ frontmatter reader takes, so the Hive agent reads these files the same way.
 |---|---|---|
 | `station` | yes | the file's name without `.md`, which must be `repo`'s station name (section 3); a pointer whose name is not is `pointer-invalid` |
 | `repo` | yes | `<owner>/<repo>` |
-| `raw` | yes | the raw base it is read from; its last two path parts are `repo`'s owner and name (compared without case) |
+| `raw` | yes | the raw base it is read from; its last two path parts are `repo`'s owner and name (compared without case), and a raw base on `https://raw.githubusercontent.com` is exactly `https://raw.githubusercontent.com/<owner>/<repo>/` |
 | `lts` | with `rapp1-lts` | its LTS commit, 40 lowercase hex; there exactly when `channel` is `rapp1-lts` |
 | `newest` | yes | `HEAD`, or a branch name of 1 to 100 of `A-Z a-z 0-9 . _ -` that does not start with `.`, holds no `..` and does not end in `.` or `.lock` |
 | `line` | yes | its line id |
@@ -276,11 +277,11 @@ portfolio uses the same ones:
 | `rapp1-lts` | the RAPP/1 long-term-support channel: read at the pointer's `lts` commit, every file checked |
 | `newest` | read at `HEAD` (or at the pointer's `newest` branch), every file unpinned; experiments live here until they graduate |
 
-A pointer's and a card's lifecycle and channel are **copies**. The authority for a lifecycle is a RAPP/1 `lifecycle` entry in the estate's
-signed registry (rev-17 draft, section 13.6), whose subject is the station's rappid or, for a station without one, its
-repository's URI, `https://github.com/<owner>/<repo>`, spelled as the estate's release manifests spell it. A move of a station
-without a rappid is a `superseded` notice naming the new repository. No such entry is signed yet, so a reader reports every
-copy as unverified, and never infers a lifecycle from a missing one. When a card states a `lifecycle` and its pointer
+A pointer's and a card's lifecycle and channel are **copies**. The authority for a lifecycle is a RAPP/1 `lifecycle` entry in
+the estate's signed registry (rev-17 draft, section 13.6), whose subject is the station's rappid or, for a station without one,
+its repository's URI, `https://github.com/<owner>/<repo>`, spelled as the estate's release manifests spell it. A move of a
+station without a rappid is a `superseded` notice naming the new repository. No such entry is signed yet, so a reader reports
+every copy as unverified, and never infers a lifecycle from a missing one. When a card states a `lifecycle` and its pointer
 disagrees on `lifecycle` or `superseded_by` (`superseded_by` compared without case), the finding is `lifecycle-differs`; when a
 card states a `channel` and its pointer disagrees, it is `channel-differs`. A key the card does not state disagrees with
 nothing. The graph reports the pointer's values, the curator's copy.
@@ -361,8 +362,8 @@ starts at `hives[].published_sha256`.
 The same walk at moving refs: the Hive root's `PUBLISHED.md` at `<root>HEAD/` (its hash is recorded, not checked against a pin,
 and the files it lists are still checked against it), each pointer's `newest` ref, and `HEAD` for uncurated stations. At a
 station it reads `.rapp/member.md` and `README.md`, then `rappid.json` if the card names a `rappid`, then each path the card
-`shares` (at most 197, each read once). It follows links and successors into uncurated stations, breadth first (at most 3 hops and 1,000 stations), and
-honors `indexable: false`. Every station file is `unpinned`.
+`shares` (at most 197, each read once). It follows links and successors into uncurated stations, breadth first (at most 3 hops
+and 1,000 stations), and honors `indexable: false`. Every station file is `unpinned`.
 
 ### 11.3 Starting anywhere
 
@@ -439,10 +440,11 @@ chain, is all a reader checks.
   nothing pins) is used without a request, and one that does not is asked for again, the answer replacing it; a moving URL is
   asked again with `If-None-Match` or `If-Modified-Since`. `--offline` reads the cache as it is.
 - Redirects are refused. Requests carry a `User-Agent`, and never credentials or cookies.
-- **Transport policy**, an origin allow-list like `sniff_network.py`'s, with these defaults: allowed are `https://raw.githubusercontent.com` and the start URL's origin, and
-  the origins and `file://` folders the user adds. A URL outside the policy is never fetched (`outside-policy`), and neither is a
-  URL with a user name, a query, a fragment, a `.` or `..` part, a backslash or a NUL, a character outside ASCII (a raw URL
-  percent-encodes any other letter), or a scheme other than `https`, `http` or `file`.
+- **Transport policy**, an origin allow-list like `sniff_network.py`'s, with these defaults: allowed are
+  `https://raw.githubusercontent.com` and the start URL's origin, and the origins and `file://` folders the user adds. A URL
+  outside the policy is never fetched (`outside-policy`), and neither is a URL with a user name, a query, a fragment, a `.` or
+  `..` part, a backslash or a NUL, a character outside ASCII (a raw URL percent-encodes any other letter), or a scheme other
+  than `https`, `http` or `file`.
 
 ## 14. The resolver: commands and exit codes
 
@@ -496,12 +498,13 @@ print. Lists are sorted too, so the same network, flags and
 | `graph_sha256` | as above |
 
 A station has `station`, `repo`, `hive`, `curated`, `line`, `also_on`, `channel`, `lifecycle`, `superseded_by`, `ref`, `raw`,
-`integrity`, `files` (each `{"path", "sha256", "state"}`, sorted by path), `card` (`{"present", "what", "version",
-"channel", "lifecycle", "superseded_by", "indexable", "links", "shares", "rappid", "claims_hive"}`), `release` (`null`, or
-`{"component", "agrees"}`) and `findings`. For a curated station, `line`, `also_on`, `channel`, `lifecycle` and
-`superseded_by` are the pointer's; for an uncurated one, the card's (`null` when the card states none; `also_on` is then `[]`). With a manifest whose state is `checked` or `failed`,
-every station has `release: {"component": <id or null>, "agrees": <bool>}`, where `agrees` is `false` exactly when the
-station has a `release-drift`, `release-missing` or `door-of-record-drift` finding; otherwise `release` is `null`.
+`integrity`, `files` (each `{"path", "sha256", "state"}`, sorted by path), `card` (`{"present", "what", "version", "channel",
+"lifecycle", "superseded_by", "indexable", "links", "shares", "rappid", "claims_hive"}`), `release` (`null`, or `{"component",
+"agrees"}`) and `findings`. For a curated station, `line`, `also_on`, `channel`, `lifecycle` and `superseded_by` are the
+pointer's; for an uncurated one, the card's (`null` when the card states none; `also_on` is then `[]`). With a manifest whose
+state is `checked` or `failed`, every station has `release: {"component": <id or null>, "agrees": <bool>}`, where `agrees` is
+`false` exactly when the station has a `release-drift`, `release-missing` or `door-of-record-drift` finding; otherwise `release`
+is `null`.
 
 The worked example's LTS walk, started at its `estate.json`, with `--fixed-time 2026-09-25T00:00:00.000Z`:
 
@@ -668,11 +671,11 @@ DIR/release/<component id>/<path>          every file it pins, only when every o
 ```
 
 `SNAPSHOT.json` has `schema`, `mode`, `accepted` (`false`), `authenticity`, `chain`, `release` (as in the graph), `files` (each
-`{"path", "url", "sha256", "state", "anchor"}`, where `anchor` names what pinned it: `estate.json hives[] published_sha256`
-or `--hive-published-sha256` for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a
-station's files, `release manifest` for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`, without
-one), or `null` when nothing pinned it), `skipped` (files not written, and why, in fixed words that name no path of the device, sorted by path; a release that did not check out adds one entry
-`release`), `graph_sha256` and `generated_at`.
+`{"path", "url", "sha256", "state", "anchor"}`, where `anchor` names what pinned it: `estate.json hives[] published_sha256` or
+`--hive-published-sha256` for `PUBLISHED.md`, `PUBLISHED.md` for the root's other files, `members/<station>.md` for a station's
+files, `release manifest` for a release's files, `--manifest-hash` for `release/manifest.json` (or `null`, and `unpinned`,
+without one), or `null` when nothing pinned it), `skipped` (files not written, and why, in fixed words that name no path of the
+device, sorted by path; a release that did not check out adds one entry `release`), `graph_sha256` and `generated_at`.
 
 ## 17. Pulses
 
@@ -728,11 +731,12 @@ Every command also takes the template flags `--owner`, `--hive`, `--hive-root`, 
 `description`, cut to the text rules and to 200 characters on a word boundary (or `A <line name> repository on the RAPP/1
 network.`). `lifecycle` and `superseded_by` are the portfolio's, else `archived` when the inventory says archived, else
 `active`; nothing is inferred from other files. A card gets them only when the lifecycle is not `active`; a pointer always gets
-them, with `channel`, which is `rapp1-lts` exactly when an LTS pin is given. `links` is `links_to` (each a bare name, meaning the portfolio owner's
-repository, or `<owner>/<repo>`) without the repository itself, in either form and compared without case, and without names of
-instruction files; a neighbor of the card's own owner is written as its bare name, any other as `<owner>/<repo>`, each once,
-sorted by code point, and each Neighbors link in the body points at its own owner's repository. `rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else.
-The generator writes no `version` and no card `channel`: they would go stale in the station's own files.
+them, with `channel`, which is `rapp1-lts` exactly when an LTS pin is given. `links` is `links_to` (each a bare name, meaning
+the portfolio owner's repository, or `<owner>/<repo>`) without the repository itself, in either form and compared without case,
+and without names of instruction files; a neighbor of the card's own owner is written as its bare name, any other as
+`<owner>/<repo>`, each once, sorted by code point, and each Neighbors link in the body points at its own owner's repository.
+`rappid` mirrors the `rappid` of a valid `rappid.json` that exists, and nothing else. The generator writes no `version` and no
+card `channel`: they would go stale in the station's own files.
 
 **Commands.**
 
@@ -749,10 +753,10 @@ The generator writes no `version` and no card `channel`: they would go stale in 
 - `plan` writes `rapp-hive-card-plan/1`: `auto` or `hold` for each repository, with the reasons. It holds a repository that pins
   its tracked path set (a tracked file of any size with `tracked_path_count`, `tracked_path_set_sha256`, `path_set_sha256` or
   `tracked_paths`, or a `MANIFEST*` or `*INVENTORY*.json` file that lists at least half of the tracked paths, itself among them;
-  such a file over 16 MiB is held as too large to check, and so is a repository whose clone cannot give a tracked file), that has anything
-  in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs, that is empty, that is
-  named like an instruction file, that has no local clone, or whose generated card would not validate. `pointers` refuses a
-  repository whose portfolio `channel` disagrees with its pin (`rapp1-lts` without a pin, or `newest` with one).
+  such a file over 16 MiB is held as too large to check, and so is a repository whose clone cannot give a tracked file), that
+  has anything in `.rapp/` besides the RAPP Workspace's bootstrap files and the card, whose existing card differs, that is
+  empty, that is named like an instruction file, that has no local clone, or whose generated card would not validate. `pointers`
+  refuses a repository whose portfolio `channel` disagrees with its pin (`rapp1-lts` without a pin, or `newest` with one).
 
 The generated card's body, where `[...]` parts appear only when they apply:
 
@@ -787,9 +791,10 @@ of each. A root file under `stations/` is left out, and a station's raw base mus
 and port, compared exactly as written.
 
 The agent keeps these of section 13's bounds: 1 MB per file, read no further; a listing of more than 5,000 files, or one that
-lists a path twice, is refused whole; a root that points to more than 1,000 stations is not resolved; 200 files per station and
-64 KB per pointer (section 7); and its replies name at most 50 files left out and 200 problems, then say how many more. Its
-15 seconds apply to each read from the network, not to a whole request, and it keeps no request rate: those are the resolver's.
+lists a path twice, is refused whole; a root that points to more than 1,000 stations, or whose `PUBLISHED.md` names no Hive id,
+is not resolved; 200 files per station and 64 KB per pointer (section 7); and its replies name at most 50 files left out and 200
+problems, then say how many more. Its 15 seconds apply to each read from the network, not to a whole request, and it keeps no
+request rate: those are the resolver's.
 
 ## 20. Worked example
 

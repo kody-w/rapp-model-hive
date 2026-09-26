@@ -89,7 +89,8 @@ READABLE = re.compile(r"README\.md|rappid\.json|\.rapp/member\.md"
                       r"|\.rapp/shared/[^/]+(/[^/]+){0,3}\.(md|json|txt)")
 # A station pointer's keys and the shape of each value (`station` is also its file's name), as
 # DISTRIBUTED-HIVE.md section 7 gives them.
-REPO = r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}/[A-Za-z0-9][A-Za-z0-9._-]{0,99}"
+REPO = (r"[A-Za-z0-9](-?[A-Za-z0-9]){0,38}/(?!(?i:con|prn|aux|nul|com[1-9]|lpt[1-9])(\.|\Z))"
+        r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}(?<!\.)")
 POINTER = {"repo": REPO, "raw": r"\S+", "lts": "[0-9a-f]{40}",
            "newest": r"(?!\.|.*\.\.|.*\.\Z|.*\.lock\Z)[A-Za-z0-9._-]{1,100}",
            "line": "[a-z0-9](-?[a-z0-9]){0,63}", "also_on": "[a-z0-9](-?[a-z0-9]){0,63}",
@@ -1123,7 +1124,7 @@ def fetch(url):  # the bytes at a raw URL: at most 1 MB (never reading more), ne
             " (a redirect, which is never followed)" if 300 <= error.code < 400 else "")
             if isinstance(error, urllib.error.HTTPError)
             else f"it could not be reached ({type(error).__name__}); this device may be offline"
-        ) from None
+        ) from (error.close() if isinstance(error, urllib.error.HTTPError) else None)
 
 
 # Keep the files `wanted` names ({place in the cache: (raw URL, listed sha256)}) in `cache`, each
@@ -1145,7 +1146,8 @@ def pull(cache, wanted):
                     if place[:9] == "stations/" else ""))
             put(full, data)
         except (Refused, OSError) as why:
-            return why if isinstance(why, Refused) else f"it cannot be kept ({type(why).__name__})"
+            return (str(why) if isinstance(why, Refused)
+                    else f"it cannot be kept ({type(why).__name__})")
     with concurrent.futures.ThreadPoolExecutor(4) as pool:
         why = dict(zip(wanted, pool.map(one, wanted)))
     return {p: wanted[p][0] for p in wanted if not why[p]}, {p: w for p, w in why.items() if w}
@@ -1206,6 +1208,9 @@ def pointer(path, text, root):
             or meta["lifecycle"] == "active" and "superseded_by" in meta
             or str(meta.get("superseded_by")).lower() == meta["repo"].lower()
             or meta["raw"].lower().rstrip("/").split("/")[-2:] != meta["repo"].lower().split("/")
+            or meta["repo"].split("/")[1].lower() + ".md" in INSTRUCTION_NAMES
+            or meta["raw"].lower().startswith("https://raw.githubusercontent.com/")
+            and meta["raw"].count("/") != 5
             or station != (meta["repo"].split("/")[1] if meta["repo"].split("/")[0].lower()
                            == (root.split("/")[-4].lower() if root.count("/") > 5 else None)
                            else meta["repo"].replace("/", "."))
@@ -2098,13 +2103,16 @@ class HiveAgent(BasicAgent):
     # and checked against the hashes the pointer gives, into this device's cache (never committed).
     def _resolve(self, say, kw):
         label, cache, origins = self.source(h := self.hive(kw)[0], kw, say)
-        if origins is None or sum(bool(re.fullmatch(r"members/[^/]+\.md", p))
-                                  for p in origins) > 1000:
+        if origins is None or (many := sum(bool(re.fullmatch(r"members/[^/]+\.md", p))
+                                           for p in origins) > 1000) or not re.fullmatch(
+                "[0-9a-f]{32}", str(front(norm(read(os.path.join(cache, "PUBLISHED.md"))))[0]
+                                    .get("hive"))):
             raise Refused("resolve reads a reference pinned with url=: a Hive root's public copy"
                           if origins is None else "this root points to more than 1,000 stations; "
-                          "resolve reads at most 1,000")
-        got = {p[8:-3]: pointer(p, norm(read(os.path.join(cache, *p.split("/")))),
-                                origins["PUBLISHED.md"])
+                          "resolve reads at most 1,000" if many else "its PUBLISHED.md names no "
+                          "Hive id (hive:), so it is not a Hive root")
+        got = {p[8:-3]: pointer(p, norm(b) if len(b := read(os.path.join(cache, *p.split("/"))))
+                                <= MAX_REQUEST else "", origins["PUBLISHED.md"])
                for p in origins if re.fullmatch(r"members/[^/]+\.md", p)}
         pinned = {st: g for st, g in got.items() if not isinstance(g, str) and "lts" in g[0]}
         kept, bad = pull(cache, {p: u for g in pinned.values() for p, u in g[1].items()})
