@@ -1095,8 +1095,9 @@ def old_requests(root):
 # ---- remote references: a public copy read at a pinned commit, over plain raw URLs ------------
 
 # Why `url` cannot be read as a raw base, or None: https (http only to this device), no user name,
-# query or fragment, a host not ending in ., plain parts ending in /, on GitHub raw exactly
-# <owner>/<repo>/ (and no port), and, when `pinned`, a full 40-hex commit last.
+# query or fragment, a lowercase host not ending in . (a port at most 65535), plain parts ending
+# in /, on GitHub raw exactly <owner>/<repo>/ (no port), and, when `pinned`, a full 40-hex commit
+# after at least one part.
 def url_refusal(url, pinned=True):
     scheme, _, rest = str(url).partition("://")
     host, _, path = rest.partition("/")
@@ -1106,7 +1107,8 @@ def url_refusal(url, pinned=True):
          "http:// is only for this device (127.0.0.1 or localhost); use https://"),
         ("@" in host, "it holds a user name or password"),
         ("?" in str(url) or "#" in str(url), "it has a query (?) or a fragment (#)"),
-        (not re.fullmatch(r"[a-z0-9.-]*[a-z0-9-](:[0-9]{1,5})?", host)
+        (not re.fullmatch(r"[a-z0-9.-]*[a-z0-9-](:(0|[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}"
+                          r"|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?", host)
          or not re.fullmatch(r"([A-Za-z0-9_-][A-Za-z0-9._-]*/)+", path),
          "it is not a raw address of plain parts that ends in /"),
         (host.split(":")[0] == "raw.githubusercontent.com" and (
@@ -1114,7 +1116,8 @@ def url_refusal(url, pinned=True):
          "on raw.githubusercontent.com it is exactly https://raw.githubusercontent.com/<owner>/"
          "<repo>/" + "<commit>/" * pinned),
         (pinned and not re.fullmatch(r".+/[0-9a-f]{40}/", path),
-         "its last part is not a full 40-hex commit, so what it shows could change")) if bad), None)
+         "it does not end in a path part and a full 40-hex commit, so what it shows could change"))
+        if bad), None)
 
 
 def fetch(url):  # the bytes at a raw URL: at most 1 MB (never reading more), never redirected

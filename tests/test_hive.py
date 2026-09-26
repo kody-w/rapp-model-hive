@@ -1456,10 +1456,14 @@ class RemoteMembers(HiveTest):
                            (f"https://Contoso.example/contoso/hive-public/{pinned}/", "plain parts"),  # capitals
                            (f"https://con_toso.example/contoso/hive-public/{pinned}/", "plain parts"),  # a _
                            (f"HTTPS://contoso.example/contoso/hive-public/{pinned}/", "only https://"),  # scheme case
-                           (f"https://contoso.example:/contoso/hive-public/{pinned}/", "plain parts")):  # empty port
+                           (f"https://contoso.example:/contoso/hive-public/{pinned}/", "plain parts"),  # empty port
+                           (f"https://contoso.example:65536/contoso/hive-public/{pinned}/", "plain parts"),  # past 65535
+                           (f"https://contoso.example:08080/contoso/hive-public/{pinned}/", "plain parts"),  # a zero first
+                           (f"https://hive.contoso.example/{pinned}/", "a path part and a full 40-hex commit")):
             with self.subTest(url=url):
                 self.not_done(self.A.say(action="reference", label="contoso", url=url), words)
         for url in (f"https://contoso.example/contoso/hive-public/{pinned}/", f"http://localhost:8080/contoso/hive-public/{pinned}/",
+                    f"https://contoso.example:65535/contoso/hive-public/{pinned}/",
                     f"https://raw.githubusercontent.com/contoso/hive-public/{pinned}/", self.root_url):
             self.assertIn("Done: reference contoso is pinned", self.A.do(action="reference", label="contoso", url=url))
         self.assertEqual(ha.load(ha.Hive(self.A.home, be.HIVE).st("references.json")), {"contoso": self.root_url})  # on this device ...
